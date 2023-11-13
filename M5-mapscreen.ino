@@ -13,21 +13,88 @@ uint8_t zoom = 0;
 
 std::unique_ptr<MapScreen> mapScreen;
 
+class geo_location
+{
+  public:
+    double la;
+    double lo;
+};
+
+const geo_location diveTrack[] =
+{  
+  [0] = { .la = 0, .lo =0},
+};
+
+int trackIndex=0;
+int trackLength=sizeof(diveTrack)/sizeof(geo_location);
+
+geo_location pos;
+
 void setup()
 {
   M5.begin();
-
+  
   M5.Lcd.setRotation(0);
 
   mapScreen.reset(new MapScreen(&M5.Lcd,&M5));
+
+  pos.la = 51.4601028571429;    // spitfire car
+  pos.lo = -0.54883835;
+
+  pos.la = 51.4605855;    // lightning boat
+  pos.lo = -0.54890166666666; 
+}
+
+void cycleTrackIndex()
+{
+  trackIndex = (trackIndex + 1) % trackLength;
+
+  pos.lo += 0.00004;
+  pos.la -= 0.00002;
 }
 
 void loop()
 {
+  M5.update();
+
+  if (M5.BtnA.isPressed() && M5.BtnB.isPressed())
+  {
+    /*
+    pos.la = 51.4605855;    // lightning boat
+    pos.lo = -0.54890166666666; 
+    mapScreen->clearMap();
+    */
+     pos.lo -= 0.0002;
+     pos.la += 0.0002;
+    
+  }
+  else if (M5.BtnA.isPressed())
+     pos.lo -= 0.0001;
+  else if (M5.BtnB.isPressed())
+     pos.la += 0.0001;
+     
+
+
+
+  bool useTrack = false;
+  
+  if (useTrack)
+    mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(diveTrack[trackIndex].la,diveTrack[trackIndex].lo);
+  else
+    mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(pos.la,pos.lo);
+    
+  cycleTrackIndex();
+  delay(100);
+}
+
+
+void loop_away()
+{
 //  M5.update();
 //  mapScreen->testDrawingMapsAndFeatures(currentMap,zoom);
 
-    mapScreen->drawFeaturesOnMapToScreen(s_maps+currentMap);
+    mapScreen->drawFeaturesOnSpecifiedMapToScreen(s_maps+currentMap);
+    
     mapScreen->testAnimatingDiverSpriteOnCurrentMap();
     
     currentMap++;
@@ -39,46 +106,5 @@ void loop()
 /*
 
 // need an out of map option - the top middle triangle for example
-uint8_t selectNextMap(const pixel loc, uint8_t thisMap)
-{
-  uint8_t nextMap = thisMap;
 
-  switch(thisMap)
-  {
-    case 0:
-    {
-      if ((loc.x >= 116 && loc.y >= 118) || loc.y >= 215)   // go right from 0 to 1
-        nextMap=1;
-      break;
-    }
-    case 1:
-    {
-      if (loc.x >= 130 && loc.y >= 55)      // go right from 1 to 2
-        nextMap=2;
-      else if (loc.x <=4 || (loc.y <= 30 && loc.x <=100))  // go left from 1 to 0
-        nextMap=0;
-      break;
-    }
-    case 2:
-    {
-      if (loc.x >= 97 || loc.y >=175)     // go right from 2 to 3
-        nextMap=3;
-      else if (loc.x <=5)
-        nextMap=2;                        // go left from 2 to 1
-      break;
-    }
-    case 3:
-    {
-      if (loc.x <= 39 || loc.y <= 119)    // go left from 3 to 2
-        nextMap=2;
-      break;
-    }
-    default:
-    {
-      break;
-    }
-  }
-  
-  return nextMap;
-}
 */

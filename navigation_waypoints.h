@@ -19,30 +19,6 @@ class navigationWaypoint
     }
 };
 
-/*
-const uint8_t waypointCount = 3;
-
-navigationWaypoint waypoints[waypointCount] =
-{
-  [0] = { ._label = "Cafe Jetty", ._lat = 51.460015, ._long = -0.548316},
-  [1] = { ._label = "Mid Jetty", ._lat = 51.459547, ._long = -0.547461},
-  [2] = { ._label = "Old Jetty",  ._lat = 51.459280, ._long = -0.547084}
-};
-*/
-
-/*
-// re-captured from google maps
-const uint8_t waypointCount = 4;
-
-navigationWaypoint waypoints[waypointCount] =
-{
-  [0] = { ._label = "Cafe Jetty", ._lat = 51.460009, ._long = -0.5483115},
-  [1] = { ._label = "Mid Jetty", ._lat = 51.4595416, ._long = -0.5474575},
-  [2] = { ._label = "Old Jetty",  ._lat = 51.45928, ._long = -0.547084},
-  [3] = { ._label = "Confined",  ._lat = 51.4599901, ._long = -0.548643}
-};
-*/
-
 const uint8_t waypointCount = 113;
 navigationWaypoint waypoints[waypointCount] =
 {
@@ -166,5 +142,31 @@ navigationWaypoint waypoints[waypointCount] =
 
 
 };
+
+
+
+/*
+const uint8_t waypointCount = 3;
+
+navigationWaypoint waypoints[waypointCount] =
+{
+  [0] = { ._label = "Cafe Jetty", ._lat = 51.460015, ._long = -0.548316},
+  [1] = { ._label = "Mid Jetty", ._lat = 51.459547, ._long = -0.547461},
+  [2] = { ._label = "Old Jetty",  ._lat = 51.459280, ._long = -0.547084}
+};
+*/
+
+/*
+// re-captured from google maps
+const uint8_t waypointCount = 4;
+
+navigationWaypoint waypoints[waypointCount] =
+{
+  [0] = { ._label = "Cafe Jetty", ._lat = 51.460009, ._long = -0.5483115},
+  [1] = { ._label = "Mid Jetty", ._lat = 51.4595416, ._long = -0.5474575},
+  [2] = { ._label = "Old Jetty",  ._lat = 51.45928, ._long = -0.547084},
+  [3] = { ._label = "Confined",  ._lat = 51.4599901, ._long = -0.548643}
+};
+*/
 
 #endif
