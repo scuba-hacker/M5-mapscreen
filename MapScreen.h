@@ -72,6 +72,7 @@ class MapScreen
       _cleanMapAndFeaturesSprite.reset(new TFT_eSprite(_tft));
       _compositedScreenSprite.reset(new TFT_eSprite(_tft));
       _diverSprite.reset(new TFT_eSprite(_tft));
+      _featureSprite.reset(new TFT_eSprite(_tft));
 
       initSprites();
     }
@@ -97,6 +98,7 @@ class MapScreen
     std::unique_ptr<TFT_eSprite> _cleanMapAndFeaturesSprite;
     std::unique_ptr<TFT_eSprite> _compositedScreenSprite;
     std::unique_ptr<TFT_eSprite> _diverSprite;
+    std::unique_ptr<TFT_eSprite> _featureSprite;
 
     static const uint16_t s_imgHeight = 240;
     static const uint16_t s_imgWidth = 135;
@@ -104,6 +106,7 @@ class MapScreen
     static const uint8_t s_featureSpriteRadius = 5;
     static const uint16_t s_diverSpriteColour = TFT_BLUE;
     static const uint16_t s_featureSpriteColour = TFT_MAGENTA;
+    static const bool     s_useSpriteForFeatures = true;
 
     const geo_map *_currentMap, *_previousMap;
 
@@ -369,6 +372,10 @@ void MapScreen::initSprites()
   _diverSprite->setColorDepth(16);
   _diverSprite->createSprite(s_diverSpriteRadius*2,s_diverSpriteRadius*2);
   _diverSprite->fillCircle(s_diverSpriteRadius,s_diverSpriteRadius,s_diverSpriteRadius,s_diverSpriteColour);
+
+  _featureSprite->setColorDepth(16);
+  _featureSprite->createSprite(s_featureSpriteRadius*2+1,s_featureSpriteRadius*2+1);
+  _featureSprite->fillCircle(s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteColour);
 }
 
 void MapScreen::drawFeaturesOnCleanMapSprite(const geo_map* featureMap,uint8_t zoom,int tileX,int tileY)
@@ -381,7 +388,11 @@ void MapScreen::drawFeaturesOnCleanMapSprite(const geo_map* featureMap,uint8_t z
 
     if (p.x >= 0 && p.x < s_imgWidth && p.y >=0 && p.y < s_imgHeight)
     {
-      _cleanMapAndFeaturesSprite->fillCircle(p.x,p.y,s_featureSpriteRadius,s_featureSpriteColour);
+      if (s_useSpriteForFeatures)
+        _featureSprite->pushToSprite(_cleanMapAndFeaturesSprite.get(),p.x - s_featureSpriteRadius, p.y - s_featureSpriteRadius,TFT_BLACK);
+      else
+        _cleanMapAndFeaturesSprite->fillCircle(p.x,p.y,s_featureSpriteRadius,s_featureSpriteColour);
+        
 //      debugPixelFeatureOutput(waypoints+i, p, featureMap);
     }
   }
