@@ -124,7 +124,12 @@ class MapScreen
     pixel convertGeoToPixel(double latitude, double longitude, const geo_map* mapToPlot) const;
     const geo_map* getNextMapByPixelLocation(const MapScreen::pixel loc, const geo_map* thisMap) const;
 
+    bool isPixelInCanoeZone(const MapScreen::pixel loc, const geo_map* thisMap) const;
+    bool isPixelInSubZone(const MapScreen::pixel loc, const geo_map* thisMap) const;
+    bool isPixelOutsideScreenExtent(const MapScreen::pixel loc) const;
+
     void debugPixelMapOutput(const MapScreen::pixel loc, const geo_map* thisMap, const geo_map* nextMap) const;
+    void debugPixelFeatureOutput(navigationWaypoint* waypoint, MapScreen::pixel loc, const geo_map* thisMap) const;
 };
 
 void MapScreen::clearMap()
@@ -230,6 +235,7 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
     {
       _cleanMapAndFeaturesSprite->pushImageScaled(0, 0, s_imgWidth, s_imgHeight, _zoom, _tileX, _tileY, 
                                                   nextMap->mapData, nextMap->swapBytes);
+      drawFeaturesOnCleanMapSprite(nextMap);    // temp
     }
     else
     {
@@ -261,19 +267,71 @@ void MapScreen::debugPixelMapOutput(const MapScreen::pixel loc, const geo_map* t
   Serial.printf("%s %i, %i --> %s\n",thisMap->label,loc.x,loc.y,nextMap->label);
 }
 
+void MapScreen::debugPixelFeatureOutput(navigationWaypoint* waypoint, MapScreen::pixel loc, const geo_map* thisMap) const
+{
+  Serial.printf("x=%i y=%i %s %s \n",loc.x,loc.y,thisMap->label,waypoint->_label);
+}
+
+bool MapScreen::isPixelInCanoeZone(const MapScreen::pixel loc, const geo_map* thisMap) const
+{
+  bool result = false;
+  
+  if (thisMap == _northMap)
+  {
+    const int en = 3;    // enlarge extent by pixels
+    result =( loc.x > 61 && loc.x < 80 && loc.y > 48-en && loc.y < 69+en);
+  }
+
+  return result;
+}
+
+bool MapScreen::isPixelInSubZone(const MapScreen::pixel loc, const geo_map* thisMap) const
+{
+  bool result = false;
+  
+  const int en = 3;    // enlarge extent by pixels
+  if (thisMap == _northMap)
+  {
+    return (loc.x > 47 && loc.x < 66 && loc.y > 170-en && loc.y < 189+en);;
+  }
+  else if (thisMap == _cafeJettyMap)
+  {
+    return (loc.x > 13 && loc.x < 32 && loc.y > 51-en && loc.y < 70+en);
+  }  
+  
+  return result;
+}
+
+bool MapScreen::isPixelOutsideScreenExtent(const MapScreen::pixel loc) const
+{
+  return (loc.x <= 0 || loc.x >= s_imgWidth || loc.y <=0 || loc.y >= s_imgHeight); 
+}
+
 const geo_map* MapScreen::getNextMapByPixelLocation(const MapScreen::pixel loc, const geo_map* thisMap) const
 {
   const geo_map* nextMap = thisMap;
 
-  if (thisMap == _northMap)   // go right from 0 to 1  
+  if ((thisMap == _canoeZoneMap || thisMap == _subZoneMap) && isPixelOutsideScreenExtent(loc))
   {
-    if ((loc.x >= 116 && loc.y >= 118) || 
-         loc.x >= 30 && loc.y >= 215)
+    nextMap = (thisMap == _canoeZoneMap ? _northMap : _cafeJettyMap);   // go back to previous map?
+  }
+  else if (thisMap == _northMap)   // go right from 0 to 1
+  {
+    if (isPixelInCanoeZone(loc, thisMap))
+      nextMap = _canoeZoneMap;
+    else if (isPixelInSubZone(loc, thisMap))
+      nextMap = _subZoneMap;
+    else if ((loc.x >= 116 && loc.y >= 118) || 
+           loc.x >= 30 && loc.y >= 215)
+    {
       nextMap=_cafeJettyMap;
+    }
   }
   else if (thisMap == _cafeJettyMap)
   { 
-    if (loc.x >= 125 && loc.y >= 55 || 
+    if (isPixelInSubZone(loc, thisMap))
+      nextMap = _subZoneMap;
+    else if (loc.x >= 125 && loc.y >= 55 || 
         loc.x >= 135)      // go right from 1 to 2
       nextMap=_midJettyMap;
     else if (loc.x <=4 && loc.y <= 122 || 
@@ -282,19 +340,17 @@ const geo_map* MapScreen::getNextMapByPixelLocation(const MapScreen::pixel loc, 
   }
   else if (thisMap == _midJettyMap)
   {
-      if (loc.x >= 97 && loc.y >= 48|| 
-          loc.y >= 175 && loc.x >= 42) // go right from 2 to 3
-        nextMap=_southMap;
-      else if (loc.x <= 0)
-        nextMap=_cafeJettyMap;          // go left from 2 to 1
-
+    if (loc.x >= 97 && loc.y >= 48|| 
+        loc.y >= 175 && loc.x >= 42) // go right from 2 to 3
+      nextMap=_southMap;
+    else if (loc.x <= 0)
+      nextMap=_cafeJettyMap;          // go left from 2 to 1
   }
   else if (thisMap == _southMap)
   {
-      if  (loc.x <= 0 && loc.y <= 193 || 
-           loc.x <= 39 && loc.y <= 119) // go left from 3 to 2
-        nextMap = _midJettyMap;
-        
+    if  (loc.x <= 0 && loc.y <= 193 || 
+         loc.x <= 39 && loc.y <= 119) // go left from 3 to 2
+      nextMap = _midJettyMap;
   }
 
 //  debugPixelMapOutput(loc, thisMap, nextMap);
@@ -326,6 +382,7 @@ void MapScreen::drawFeaturesOnCleanMapSprite(const geo_map* featureMap,uint8_t z
     if (p.x >= 0 && p.x < s_imgWidth && p.y >=0 && p.y < s_imgHeight)
     {
       _cleanMapAndFeaturesSprite->fillCircle(p.x,p.y,s_featureSpriteRadius,s_featureSpriteColour);
+//      debugPixelFeatureOutput(waypoints+i, p, featureMap);
     }
   }
 }
