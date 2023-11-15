@@ -78,7 +78,8 @@ class MapScreen
                                                   _showAllLake(false),
                                                   _lastDiverLatitude(0),
                                                   _lastDiverLongitude(0),
-                                                  _lastDiverHeading(0)
+                                                  _lastDiverHeading(0),
+                                                  _useDiverHeading(false)
     {
       _tft = tft;
       _m5 = m5;
@@ -88,6 +89,8 @@ class MapScreen
       _cleanMapAndFeaturesSprite.reset(new TFT_eSprite(_tft));
       _compositedScreenSprite.reset(new TFT_eSprite(_tft));
       _diverSprite.reset(new TFT_eSprite(_tft));
+      _diverPlainSprite.reset(new TFT_eSprite(_tft));
+      _diverRotatedSprite.reset(new TFT_eSprite(_tft));
       _featureSprite.reset(new TFT_eSprite(_tft));
 
       initSprites();
@@ -97,7 +100,12 @@ class MapScreen
     {
 
     }
-
+    
+    void setUseDiverHeading(const bool use)
+    {
+      _useDiverHeading = use;
+    }
+    
     void initCurrentMap(const double diverLatitude, const double diverLongitude);
     void clearMap();
     void drawFeaturesOnSpecifiedMapToScreen(const geo_map* featureAreaToShow, int16_t zoom=1, int16_t tileX=0, int16_t tileY=0);
@@ -120,6 +128,8 @@ class MapScreen
     std::unique_ptr<TFT_eSprite> _cleanMapAndFeaturesSprite;
     std::unique_ptr<TFT_eSprite> _compositedScreenSprite;
     std::unique_ptr<TFT_eSprite> _diverSprite;
+    std::unique_ptr<TFT_eSprite> _diverPlainSprite;
+    std::unique_ptr<TFT_eSprite> _diverRotatedSprite;
     std::unique_ptr<TFT_eSprite> _featureSprite;
 
     static const int16_t s_imgHeight = 240;
@@ -133,6 +143,8 @@ class MapScreen
     double _lastDiverLatitude;
     double _lastDiverLongitude;
     double _lastDiverHeading;
+
+    bool _useDiverHeading;
     
     const geo_map *_currentMap, *_previousMap;
 
@@ -206,10 +218,25 @@ void MapScreen::initSprites()
   _compositedScreenSprite->setColorDepth(16);
   _compositedScreenSprite->createSprite(135,240);
 
+   uint16_t s_headingIndicatorColour=TFT_RED;
+   uint16_t s_headingIndicatorRadius=8;
+   uint16_t s_headingIndicatorOffsetX=s_diverSpriteRadius;
+   uint16_t s_headingIndicatorOffsetY=0;
+
   _diverSprite->setColorDepth(16);
   _diverSprite->createSprite(s_diverSpriteRadius*2,s_diverSpriteRadius*2);
   _diverSprite->fillCircle(s_diverSpriteRadius,s_diverSpriteRadius,s_diverSpriteRadius,s_diverSpriteColour);
+  
+  _diverPlainSprite->setColorDepth(16);
+  _diverPlainSprite->createSprite(s_diverSpriteRadius*2,s_diverSpriteRadius*2);
+  _diverSprite->pushToSprite(_diverPlainSprite.get(),0,0);
 
+  _diverSprite->fillCircle(s_headingIndicatorOffsetX,s_headingIndicatorOffsetY,s_headingIndicatorRadius,s_headingIndicatorColour);
+
+
+  _diverRotatedSprite->setColorDepth(16);
+  _diverRotatedSprite->createSprite(s_diverSpriteRadius*2,s_diverSpriteRadius*2);  
+  
   _featureSprite->setColorDepth(16);
   _featureSprite->createSprite(s_featureSpriteRadius*2+1,s_featureSpriteRadius*2+1);
   _featureSprite->fillCircle(s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteColour);
@@ -529,9 +556,15 @@ void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const doub
     int16_t tileX=0,tileY=0;
     p = scalePixelForZoomedInTile(p,tileX,tileY);
 
-    // perform diver sprite rotation here - need a temp sprite to copy into.
-    
-    _diverSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
+    if (_useDiverHeading)
+    {
+      _diverSprite->pushRotated(_diverRotatedSprite.get(),heading,TFT_BLACK); // BLACK is the transparent colour
+      _diverRotatedSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
+    }
+    else
+    {
+      _diverPlainSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
+    }
 }
 /*
 void MapScreen::drawFeaturesOnCleanMapSprite(const geo_map* featureMap)

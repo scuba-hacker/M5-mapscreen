@@ -10,6 +10,8 @@
 
 uint8_t currentMap = 0;
 uint8_t zoom = 0;
+uint16_t heading = 0;
+const uint16_t headingStep = 25;
 
 std::unique_ptr<MapScreen> mapScreen;
 
@@ -35,8 +37,9 @@ void setup()
   M5.begin();
   
   M5.Lcd.setRotation(0);
-
+  
   mapScreen.reset(new MapScreen(&M5.Lcd,&M5));
+  mapScreen->setUseDiverHeading(true);
 
   pos.la = 51.4601028571429;    // spitfire car
   pos.lo = -0.54883835;
@@ -83,7 +86,11 @@ void loop()
   if (useTrack)
     mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(diveTrack[trackIndex].la,diveTrack[trackIndex].lo);
   else
-    mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(pos.la,pos.lo);
+  {
+    mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(pos.la,pos.lo,heading);
+    heading+=headingStep;
+    heading%=360;
+  }
     
   cycleTrackIndex();
   delay(100);
