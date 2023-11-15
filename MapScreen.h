@@ -43,26 +43,33 @@ static const geo_map s_maps[] =
   [6] = { .mapData = nullptr, .label="Sub",  .backColour=TFT_CYAN, .backText="Sub",.surveyMap=true, .swapBytes=false, .mapLongitudeLeft = -0.54931, .mapLongitudeRight = -0.54900, .mapLatitudeBottom = 51.4608}, // Sub area
 };
 
+
 class MapScreen
 {     
-  private:
+  public:
     class pixel
     {
       public:
-        pixel() : x(0), y(0) {}
-        pixel(int16_t xx, int16_t yy) : x(xx), y(yy) {}
-        
+        pixel() : x(0), y(0), colour(0) {}
+        pixel(int16_t xx, int16_t yy, uint16_t colourr) : x(xx), y(yy), colour(colourr) {}
+        pixel(int16_t xx, int16_t yy) : x(xx), y(yy), colour(0) {}
+
         int16_t x;
         int16_t y;
+        uint16_t colour;
     };
-    
+
   public:
     MapScreen(TFT_eSPI* tft, M5StickCPlus* m5) : _allLakeMap(s_maps+4), 
                                                   _canoeZoneMap(s_maps+5),
                                                   _subZoneMap(s_maps+6),
                                                   _zoom(1),
-                                                  _tileX(0),
-                                                  _tileY(0)
+                                                  _priorToZoneZoom(1),
+                                                  _tileXToDisplay(0),
+                                                  _tileYToDisplay(0),
+                                                  _showAllLake(false),
+                                                  _lastDiverLatitude(0),
+                                                  _lastDiverLongitude(0)
     {
       _tft = tft;
       _m5 = m5;
@@ -84,12 +91,51 @@ class MapScreen
 
     void initCurrentMap(const double diverLatitude, const double diverLongitude);
     void clearMap();
-    void drawFeaturesOnSpecifiedMapToScreen(const geo_map* featureAreaToShow);
+    void drawFeaturesOnSpecifiedMapToScreen(const geo_map* featureAreaToShow, int16_t zoom=1, int16_t tileX=0, int16_t tileY=0);
     void drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitude, const double diverLongitude);
+    void drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const geo_map* featureMap);
+
+    void drawRegistrationPixelsOnCleanMapSprite(const geo_map* featureMap);
+
+    void cycleZoom()
+    {            
+      if (_showAllLake)
+      {
+        _showAllLake = false;
+        _zoom = 1;
+        _previousMap=_allLakeMap; 
+        _currentMap=nullptr;
+        Serial.println("switch to zoom 1 normal map\n");
+      }
+      else if (!_showAllLake && _zoom == 4)
+      {
+        _showAllLake = true;
+        _zoom = 1;
+        _currentMap = _allLakeMap;
+        Serial.println("switch to zoom 4 normal map\n");
+      }
+      else if (!_showAllLake && _zoom == 3)
+      {
+        _showAllLake = false;
+        _zoom = 4;
+        Serial.println("switch to zoom 3 normal map\n");
+      }
+      else if (!_showAllLake && _zoom == 2)
+      {
+        _showAllLake = false;
+        _zoom = 3;
+        Serial.println("switch to zoom 2 normal map\n");
+      }
+      else if (!_showAllLake && _zoom == 1)
+      {
+        _showAllLake = false;
+        _zoom = 2;
+        Serial.println("switch to zoom 2 normal map\n");
+      }
+    }
     
     void testAnimatingDiverSpriteOnCurrentMap();
-    void testDrawingMapsAndFeatures(uint8_t& currentMap, uint8_t& zoom);
-
+    void testDrawingMapsAndFeatures(uint8_t& currentMap, int16_t& zoom);
 
   private:
     TFT_eSPI* _tft;
@@ -100,15 +146,20 @@ class MapScreen
     std::unique_ptr<TFT_eSprite> _diverSprite;
     std::unique_ptr<TFT_eSprite> _featureSprite;
 
-    static const uint16_t s_imgHeight = 240;
-    static const uint16_t s_imgWidth = 135;
+    static const int16_t s_imgHeight = 240;
+    static const int16_t s_imgWidth = 135;
     static const uint8_t s_diverSpriteRadius = 15;
     static const uint8_t s_featureSpriteRadius = 5;
     static const uint16_t s_diverSpriteColour = TFT_BLUE;
     static const uint16_t s_featureSpriteColour = TFT_MAGENTA;
     static const bool     s_useSpriteForFeatures = true;
 
+    double _lastDiverLatitude;
+    double _lastDiverLongitude;
+
     const geo_map *_currentMap, *_previousMap;
+
+    bool _showAllLake;
 
     const geo_map* _northMap=s_maps;          const uint8_t _northMapIndex = 0;
     const geo_map* _cafeJettyMap=s_maps+1;   const uint8_t _cafeJettyMapIndex = 1;
@@ -118,14 +169,19 @@ class MapScreen
     const geo_map* _canoeZoneMap=s_maps+5;   const uint8_t _canoeZoneMapIndex = 5;
     const geo_map* _subZoneMap=s_maps+6;     const uint8_t _subZoneMapIndex = 6;
 
-    uint8_t _zoom;
-    uint8_t _tileX;
-    uint8_t _tileY;
+    int16_t _zoom;
+    int16_t _priorToZoneZoom;
+    int16_t _tileXToDisplay;
+    int16_t _tileYToDisplay;
     
     void initSprites();
-    void drawFeaturesOnCleanMapSprite(const geo_map* featureMap,uint8_t zoom=1,int tileX=0,int tileY=0);
-    pixel convertGeoToPixel(double latitude, double longitude, const geo_map* mapToPlot) const;
-    const geo_map* getNextMapByPixelLocation(const MapScreen::pixel loc, const geo_map* thisMap) const;
+    void drawFeaturesOnCleanMapSprite(const geo_map* featureMap);
+//    void drawFeaturesOnCleanMapSprite(const geo_map* featureMap,uint8_t zoom, uint8_t tileX, uint8_t tileY);
+    pixel convertGeoToPixelDouble(double latitude, double longitude, const geo_map* mapToPlot) const;
+    pixel convertGeoToPixelFloat(float latitude, float longitude, const geo_map* mapToPlot) const;
+    
+    const geo_map* getNextMapByPixelLocation(const MapScreen::pixel loc, const geo_map* thisMap);
+    MapScreen::pixel scalePixelForZoomedInTile(const pixel p, int16_t& tileX, int16_t& tileY) const;
 
     bool isPixelInCanoeZone(const MapScreen::pixel loc, const geo_map* thisMap) const;
     bool isPixelInSubZone(const MapScreen::pixel loc, const geo_map* thisMap) const;
@@ -133,21 +189,58 @@ class MapScreen
 
     void debugPixelMapOutput(const MapScreen::pixel loc, const geo_map* thisMap, const geo_map* nextMap) const;
     void debugPixelFeatureOutput(navigationWaypoint* waypoint, MapScreen::pixel loc, const geo_map* thisMap) const;
+    void debugScaledPixelForTile(pixel p, pixel pScaled, int16_t tileX,int16_t tileY) const;
 };
 
-void MapScreen::clearMap()
+
+const int16_t mX = 135,  hX = 67;
+const int16_t mY = 240,  hY = 120;
+const int16_t o = 10;
+
+const int registrationPixelsSize=16;
+const MapScreen::pixel registrationPixels[registrationPixelsSize] =
 {
-  _currentMap = _previousMap = nullptr;
-  _m5->Lcd.fillScreen(TFT_BLACK);
+  [0] = { .x = o,    .y = o,    .colour = 0xFF00},
+  [1] = { .x = hX-o, .y = o,    .colour = 0xFF00},
+  [2] = { .x = o,    .y = hY-o, .colour = 0xFF00},
+  [3] = { .x = hX-o, .y = hY-o, .colour = 0xFF00},
+  
+  [4] = { .x = hX+o, .y = o,    .colour = 0xFFFF},
+  [5] = { .x = mX-o, .y = o,    .colour = 0xFFFF},
+  [6] = { .x = hX+o, .y = hY-o, .colour = 0xFFFF},
+  [7] = { .x = mX-o, .y = hY-o, .colour = 0xFFFF},
+
+  [8]  = { .x = o,    .y = hY+o, .colour = 0x00FF},
+  [9]  = { .x = hX-o, .y = hY+o, .colour = 0x00FF},
+  [10] = { .x = o,    .y = mY-o, .colour = 0x00FF},
+  [11] = { .x = hX-o, .y = mY-o, .colour = 0x00FF},
+
+  [12] = { .x = hX+o, .y = hY+o, .colour = 0x0000},
+  [13] = { .x = mX-o, .y = hY+o, .colour = 0x0000},
+  [14] = { .x = hX+o, .y = mY-o, .colour = 0x0000},
+  [15] = { .x = mX-o, .y = mY-o, .colour = 0x0000},
+};
+    
+void MapScreen::initSprites()
+{
+  _cleanMapAndFeaturesSprite->setColorDepth(16);
+  _cleanMapAndFeaturesSprite->createSprite(135,240);
+
+  _compositedScreenSprite->setColorDepth(16);
+  _compositedScreenSprite->createSprite(135,240);
+
+  _diverSprite->setColorDepth(16);
+  _diverSprite->createSprite(s_diverSpriteRadius*2,s_diverSpriteRadius*2);
+  _diverSprite->fillCircle(s_diverSpriteRadius,s_diverSpriteRadius,s_diverSpriteRadius,s_diverSpriteColour);
+
+  _featureSprite->setColorDepth(16);
+  _featureSprite->createSprite(s_featureSpriteRadius*2+1,s_featureSpriteRadius*2+1);
+  _featureSprite->fillCircle(s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteColour);
 }
 
 void MapScreen::initCurrentMap(const double diverLatitude, const double diverLongitude)
 {
   Serial.println("enter initCurrentMap");  
-  // set zoom=1, tileX=0, tileY=0
-  // find which map the lat/long is on. If outside all map area then choose all lake map.
-  _zoom = 1;
-  _tileX = _tileY = 0;
   
   _currentMap = _previousMap = _allLakeMap;
 
@@ -156,10 +249,11 @@ void MapScreen::initCurrentMap(const double diverLatitude, const double diverLon
   // identify first map that includes diver location within extent
   for (uint8_t i=_northMapIndex; i<=_allLakeMapIndex; i++)
   {
-    p = convertGeoToPixel(diverLatitude, diverLongitude, s_maps+i);
+    p = convertGeoToPixelDouble(diverLatitude, diverLongitude, s_maps+i);
     if (p.x >= 0 && p.x < s_imgWidth && p.y >=0 && p.y < s_imgHeight)
     {
-      Serial.printf("hit map: %i x=%hu y=%hu\n",i,p.x,p.y);
+      scalePixelForZoomedInTile(p,_tileXToDisplay, _tileYToDisplay);
+      Serial.printf("hit map: %i x=%hu y=%hu tx=%i ty=%i\n",i,p.x,p.y,_tileXToDisplay,_tileYToDisplay);
       _currentMap = s_maps+i;
       break;
     }
@@ -168,6 +262,7 @@ void MapScreen::initCurrentMap(const double diverLatitude, const double diverLon
       Serial.printf("miss map: %i x=%hu y=%hu\n",i,p.x,p.y);
     }
   }
+  
 
   if (_currentMap == _northMap)
   {
@@ -207,6 +302,12 @@ void MapScreen::initCurrentMap(const double diverLatitude, const double diverLon
   Serial.println("exit initCurrentMap");  
 }
 
+void MapScreen::clearMap()
+{
+  _currentMap = _previousMap = nullptr;
+  _m5->Lcd.fillScreen(TFT_BLACK);
+}
+
 /* Requirements:
  *  
  *  _currentMap starts at NULL.
@@ -221,36 +322,44 @@ void MapScreen::initCurrentMap(const double diverLatitude, const double diverLon
 
 void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitude, const double diverLongitude)
 {
-    if (_currentMap == nullptr || _currentMap == _allLakeMap)
+    _lastDiverLatitude = diverLatitude;
+    _lastDiverLongitude = diverLongitude;
+    
+    if (_currentMap == nullptr)
     {
       initCurrentMap(diverLatitude, diverLongitude);
     }
     
-    pixel p = convertGeoToPixel(diverLatitude, diverLongitude, _currentMap);
+    pixel p = convertGeoToPixelDouble(diverLatitude, diverLongitude, _currentMap);
     const geo_map* nextMap = getNextMapByPixelLocation(p, _currentMap);
 
     if (nextMap != _currentMap)
+    {
+       p = convertGeoToPixelDouble(diverLatitude, diverLongitude, nextMap);
       _previousMap = _currentMap;
+    }
+
+    p = scalePixelForZoomedInTile(p,_tileXToDisplay,_tileYToDisplay);
 
     // draw diver and feature map at pixel
-    
     if (nextMap->mapData)
     {
-      _cleanMapAndFeaturesSprite->pushImageScaled(0, 0, s_imgWidth, s_imgHeight, _zoom, _tileX, _tileY, 
+      
+      _cleanMapAndFeaturesSprite->pushImageScaled(0, 0, s_imgWidth, s_imgHeight, _zoom, _tileXToDisplay, _tileYToDisplay, 
                                                   nextMap->mapData, nextMap->swapBytes);
-      drawFeaturesOnCleanMapSprite(nextMap);    // temp
+      drawFeaturesOnCleanMapSprite(nextMap);
+//      drawRegistrationPixelsOnCleanMapSprite(nextMap);
     }
     else
     {
       _cleanMapAndFeaturesSprite->fillSprite(nextMap->backColour);
       
-      drawFeaturesOnCleanMapSprite(nextMap);
+      drawFeaturesOnCleanMapSprite(nextMap);  // need to revert zoom to 1
     }
     
     _cleanMapAndFeaturesSprite->pushToSprite(_compositedScreenSprite.get(),0,0);
     
-    p = convertGeoToPixel(diverLatitude, diverLongitude, nextMap);
-    _diverSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
+    drawDiverOnCompositedMapSprite(diverLatitude, diverLongitude, nextMap);
 
     _compositedScreenSprite->pushSprite(0,0);
 
@@ -263,16 +372,6 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
     }
 
     _currentMap = nextMap;
-}
-
-void MapScreen::debugPixelMapOutput(const MapScreen::pixel loc, const geo_map* thisMap, const geo_map* nextMap) const
-{
-  Serial.printf("%s %i, %i --> %s\n",thisMap->label,loc.x,loc.y,nextMap->label);
-}
-
-void MapScreen::debugPixelFeatureOutput(navigationWaypoint* waypoint, MapScreen::pixel loc, const geo_map* thisMap) const
-{
-  Serial.printf("x=%i y=%i %s %s \n",loc.x,loc.y,thisMap->label,waypoint->_label);
 }
 
 bool MapScreen::isPixelInCanoeZone(const MapScreen::pixel loc, const geo_map* thisMap) const
@@ -310,20 +409,32 @@ bool MapScreen::isPixelOutsideScreenExtent(const MapScreen::pixel loc) const
   return (loc.x <= 0 || loc.x >= s_imgWidth || loc.y <=0 || loc.y >= s_imgHeight); 
 }
 
-const geo_map* MapScreen::getNextMapByPixelLocation(const MapScreen::pixel loc, const geo_map* thisMap) const
+const geo_map* MapScreen::getNextMapByPixelLocation(const MapScreen::pixel loc, const geo_map* thisMap)
 {
   const geo_map* nextMap = thisMap;
 
+  if (thisMap == _allLakeMap)
+    return _allLakeMap;
+    
   if ((thisMap == _canoeZoneMap || thisMap == _subZoneMap) && isPixelOutsideScreenExtent(loc))
   {
     nextMap = (thisMap == _canoeZoneMap ? _northMap : _cafeJettyMap);   // go back to previous map?
+    _zoom = _priorToZoneZoom;
   }
   else if (thisMap == _northMap)   // go right from 0 to 1
   {
     if (isPixelInCanoeZone(loc, thisMap))
+    {
+      _priorToZoneZoom=_zoom;
+      _zoom = 1;
       nextMap = _canoeZoneMap;
+    }
     else if (isPixelInSubZone(loc, thisMap))
+    {
+      _priorToZoneZoom=_zoom;
+      _zoom = 1;
       nextMap = _subZoneMap;
+    }
     else if ((loc.x >= 116 && loc.y >= 118) || 
            loc.x >= 30 && loc.y >= 215)
     {
@@ -333,13 +444,21 @@ const geo_map* MapScreen::getNextMapByPixelLocation(const MapScreen::pixel loc, 
   else if (thisMap == _cafeJettyMap)
   { 
     if (isPixelInSubZone(loc, thisMap))
-      nextMap = _subZoneMap;
+    {
+      _priorToZoneZoom=_zoom;
+      _zoom = 1;
+      nextMap = _subZoneMap;                  // reset zoom to 1
+    }
     else if (loc.x >= 125 && loc.y >= 55 || 
         loc.x >= 135)      // go right from 1 to 2
+    {
       nextMap=_midJettyMap;
+    }
     else if (loc.x <=4 && loc.y <= 122 || 
             loc.x <= 83 && loc.y <= 30 )  // go left from 1 to 0
+    {
       nextMap=_northMap;
+    }
   }
   else if (thisMap == _midJettyMap)
   {
@@ -361,32 +480,84 @@ const geo_map* MapScreen::getNextMapByPixelLocation(const MapScreen::pixel loc, 
   return nextMap;
 }
 
-void MapScreen::initSprites()
+MapScreen::pixel MapScreen::scalePixelForZoomedInTile(const pixel p, int16_t& tileX, int16_t& tileY) const
 {
-  _cleanMapAndFeaturesSprite->setColorDepth(16);
-  _cleanMapAndFeaturesSprite->createSprite(135,240);
+  tileX = p.x / (s_imgWidth / _zoom);
+  tileY = p.y / (s_imgHeight / _zoom);
 
-  _compositedScreenSprite->setColorDepth(16);
-  _compositedScreenSprite->createSprite(135,240);
+  pixel pScaled;
+  if (tileX < _zoom && tileY < _zoom)
+  {
+    pScaled.x = p.x * _zoom - (s_imgWidth)  * tileX;
+    pScaled.y = p.y * _zoom - (s_imgHeight) * tileY;
+  }
+  else
+  {
+    pScaled.x = p.x * _zoom;
+    pScaled.y = p.y * _zoom;
+    tileX = tileY = 0;
+  }
 
-  _diverSprite->setColorDepth(16);
-  _diverSprite->createSprite(s_diverSpriteRadius*2,s_diverSpriteRadius*2);
-  _diverSprite->fillCircle(s_diverSpriteRadius,s_diverSpriteRadius,s_diverSpriteRadius,s_diverSpriteColour);
+  pScaled.colour = p.colour;
 
-  _featureSprite->setColorDepth(16);
-  _featureSprite->createSprite(s_featureSpriteRadius*2+1,s_featureSpriteRadius*2+1);
-  _featureSprite->fillCircle(s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteColour);
+//  debugScaledPixelForTile(p, pScaled, tileX,tileY);
+
+  return pScaled;
 }
 
-void MapScreen::drawFeaturesOnCleanMapSprite(const geo_map* featureMap,uint8_t zoom,int tileX,int tileY)
+
+
+void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const geo_map* featureMap)
+{
+    pixel p = convertGeoToPixelDouble(latitude, longitude, featureMap);
+
+    int16_t tileX=0,tileY=0;
+    p = scalePixelForZoomedInTile(p,tileX,tileY);
+    
+    _diverSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
+}
+/*
+void MapScreen::drawFeaturesOnCleanMapSprite(const geo_map* featureMap)
+{
+  drawFeaturesOnCleanMapSprite(featureMap,_zoom, _tileX, _tileY);
+}
+*/
+
+void MapScreen::drawRegistrationPixelsOnCleanMapSprite(const geo_map* featureMap)
+{
+  for(int i=0;i<registrationPixelsSize;i++)
+  {
+    pixel p = registrationPixels[i];
+  
+    int16_t tileX=0,tileY=0;
+    p = scalePixelForZoomedInTile(p,tileX,tileY);
+    if (tileX != _tileXToDisplay || tileY != _tileYToDisplay)
+      continue;
+  
+  //    Serial.printf("%i,%i      s: %i,%i\n",p.x,p.y,sP.x,sP.y);
+    if (p.x >= 0 && p.x < s_imgWidth && p.y >=0 && p.y < s_imgHeight)   // CHANGE these to take account of tile shown  
+    {
+      if (s_useSpriteForFeatures)
+        _featureSprite->pushToSprite(_cleanMapAndFeaturesSprite.get(),p.x - s_featureSpriteRadius, p.y - s_featureSpriteRadius,TFT_BLACK);
+      else
+        _cleanMapAndFeaturesSprite->fillCircle(p.x,p.y,s_featureSpriteRadius,p.colour);
+        
+  //      debugPixelFeatureOutput(waypoints+i, p, featureMap);
+    }
+  }
+}
+
+void MapScreen::drawFeaturesOnCleanMapSprite(const geo_map* featureMap)
 {
   for(int i=0;i<waypointCount;i++)
   {
-    pixel p = convertGeoToPixel(waypoints[i]._lat, waypoints[i]._long, featureMap);
-    p.x = (p.x - (s_imgWidth/zoom)*tileX) * zoom;
-    p.y = (p.y - (s_imgHeight/zoom)*tileY) * zoom;
+    pixel p = convertGeoToPixelDouble(waypoints[i]._lat, waypoints[i]._long, featureMap);
 
-    if (p.x >= 0 && p.x < s_imgWidth && p.y >=0 && p.y < s_imgHeight)
+    int16_t tileX=0,tileY=0;
+    p = scalePixelForZoomedInTile(p,tileX,tileY);
+
+//    Serial.printf("%i,%i      s: %i,%i\n",p.x,p.y,sP.x,sP.y);
+    if (tileX == _tileXToDisplay && tileY == _tileYToDisplay && p.x >= 0 && p.x < s_imgWidth && p.y >=0 && p.y < s_imgHeight)   // CHANGE these to take account of tile shown  
     {
       if (s_useSpriteForFeatures)
         _featureSprite->pushToSprite(_cleanMapAndFeaturesSprite.get(),p.x - s_featureSpriteRadius, p.y - s_featureSpriteRadius,TFT_BLACK);
@@ -400,8 +571,8 @@ void MapScreen::drawFeaturesOnCleanMapSprite(const geo_map* featureMap,uint8_t z
 
 //#define PI 3.141592653589793
 
-MapScreen::pixel MapScreen::convertGeoToPixel(double latitude, double longitude, const geo_map* mapToPlot) const
-{
+MapScreen::pixel MapScreen::convertGeoToPixelDouble(double latitude, double longitude, const geo_map* mapToPlot) const
+{  
   const int16_t mapWidth = s_imgWidth; // in pixels
   const int16_t mapHeight = s_imgHeight; // in pixels
   double mapLngLeft = mapToPlot->mapLongitudeLeft; // in degrees. the longitude of the left side of the map (i.e. the longitude of whatever is depicted on the left-most part of the map image)
@@ -421,10 +592,73 @@ MapScreen::pixel MapScreen::convertGeoToPixel(double latitude, double longitude,
   return pixel(x,y);
 }
 
-void MapScreen::drawFeaturesOnSpecifiedMapToScreen(const geo_map* featureAreaToShow)
-{
-    const uint8_t zoom=1, tileX=0, tileY=0;
 
+void MapScreen::debugScaledPixelForTile(pixel p, pixel pScaled, int16_t tileX,int16_t tileY) const
+{
+  Serial.printf("dspt x=%i y=%i --> x=%i y=%i  tx=%i ty=%i\n",p.x,p.y,pScaled.x,pScaled.y,tileX,tileY);
+}
+
+void MapScreen::debugPixelMapOutput(const MapScreen::pixel loc, const geo_map* thisMap, const geo_map* nextMap) const
+{
+  Serial.printf("dpmo %s %i, %i --> %s\n",thisMap->label,loc.x,loc.y,nextMap->label);
+}
+
+void MapScreen::debugPixelFeatureOutput(navigationWaypoint* waypoint, MapScreen::pixel loc, const geo_map* thisMap) const
+{
+  Serial.printf("dpfo x=%i y=%i %s %s \n",loc.x,loc.y,thisMap->label,waypoint->_label);
+}
+
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+///////////////
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+MapScreen::pixel MapScreen::convertGeoToPixelFloat(float latitude, float longitude, const geo_map* mapToPlot) const
+{
+  const int16_t mapWidth = s_imgWidth; // in pixels
+  const int16_t mapHeight = s_imgHeight; // in pixels
+  float mapLngLeft = mapToPlot->mapLongitudeLeft; // in degrees. the longitude of the left side of the map (i.e. the longitude of whatever is depicted on the left-most part of the map image)
+  float mapLngRight = mapToPlot->mapLongitudeRight; // in degrees. the longitude of the right side of the map
+  float  mapLatBottom = mapToPlot->mapLatitudeBottom; // in degrees.  the latitude of the bottom of the map
+
+  float  mapLatBottomRad = mapLatBottom * PI / 180.0;
+  float  latitudeRad = latitude * PI / 180.0;
+  float  mapLngDelta = (mapLngRight - mapLngLeft);
+
+  float  worldMapWidth = ((mapWidth / mapLngDelta) * 360.0) / (2.0 * PI);
+  float  mapOffsetY = (worldMapWidth / 2.0 * log((1.0 + sin(mapLatBottomRad)) / (1.0 - sin(mapLatBottomRad))));
+
+  int16_t x = (longitude - mapLngLeft) * ((float)mapWidth / mapLngDelta);
+  int16_t y = (float)mapHeight - ((worldMapWidth / 2.0 * log((1.0 + sin(latitudeRad)) / (1.0 - sin(latitudeRad)))) - (double)mapOffsetY);
+
+  return pixel(x,y);
+}
+
+void MapScreen::drawFeaturesOnSpecifiedMapToScreen(const geo_map* featureAreaToShow, int16_t zoom, int16_t tileX, int16_t tileY)
+{
     _currentMap = featureAreaToShow;
 
     if (featureAreaToShow->mapData)
@@ -437,7 +671,7 @@ void MapScreen::drawFeaturesOnSpecifiedMapToScreen(const geo_map* featureAreaToS
       _cleanMapAndFeaturesSprite->fillSprite(featureAreaToShow->backColour);
     }
     
-    drawFeaturesOnCleanMapSprite(featureAreaToShow);
+//    drawFeaturesOnCleanMapSprite(featureAreaToShow,_zoom,_tileX,_tileY);
 
     _cleanMapAndFeaturesSprite->pushSprite(0,0);
 
@@ -461,7 +695,7 @@ void MapScreen::testAnimatingDiverSpriteOnCurrentMap()
   {
     _cleanMapAndFeaturesSprite->pushToSprite(_compositedScreenSprite.get(),0,0);
     
-    pixel p = convertGeoToPixel(latitude, longitude, featureAreaToShow);
+    pixel p = convertGeoToPixelDouble(latitude, longitude, featureAreaToShow);
     _diverSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
 
     _compositedScreenSprite->pushSprite(0,0);
@@ -471,7 +705,7 @@ void MapScreen::testAnimatingDiverSpriteOnCurrentMap()
   }
 }
 
-void MapScreen::testDrawingMapsAndFeatures(uint8_t& currentMap, uint8_t& zoom)
+void MapScreen::testDrawingMapsAndFeatures(uint8_t& currentMap, int16_t& zoom)
 {  
   if (_m5->BtnA.isPressed())
   {
@@ -528,7 +762,7 @@ void MapScreen::testDrawingMapsAndFeatures(uint8_t& currentMap, uint8_t& zoom)
         const geo_map* featureAreaToShow = s_maps+currentMap;        
         _cleanMapAndFeaturesSprite->pushImageScaled(0, 0, s_imgWidth, s_imgHeight, zoom, tileX, tileY, featureAreaToShow->mapData);
 
-        drawFeaturesOnCleanMapSprite(featureAreaToShow, zoom, tileX, tileY);
+//        drawFeaturesOnCleanMapSprite(featureAreaToShow, zoom, tileX, tileY);
     
         double latitude = featureAreaToShow->mapLatitudeBottom;
         double longitude = featureAreaToShow->mapLongitudeLeft;
@@ -537,7 +771,7 @@ void MapScreen::testDrawingMapsAndFeatures(uint8_t& currentMap, uint8_t& zoom)
         {
           _cleanMapAndFeaturesSprite->pushToSprite(_compositedScreenSprite.get(),0,0);
           
-          pixel p = convertGeoToPixel(latitude, longitude, featureAreaToShow);
+          pixel p = convertGeoToPixelDouble(latitude, longitude, featureAreaToShow);
           _diverSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
     
           _compositedScreenSprite->pushSprite(0,0);
@@ -558,7 +792,7 @@ void MapScreen::testDrawingMapsAndFeatures(uint8_t& currentMap, uint8_t& zoom)
 
     _cleanMapAndFeaturesSprite->pushImageScaled(0, 0, s_imgWidth, s_imgHeight, 1, 0, 0, featureAreaToShow->mapData, swapBytes);
 
-    drawFeaturesOnCleanMapSprite(featureAreaToShow);
+//    drawFeaturesOnCleanMapSprite(featureAreaToShow,1,0,0);
 
     double latitude = featureAreaToShow->mapLatitudeBottom;
     double longitude = featureAreaToShow->mapLongitudeLeft;
@@ -567,7 +801,7 @@ void MapScreen::testDrawingMapsAndFeatures(uint8_t& currentMap, uint8_t& zoom)
     {
       _cleanMapAndFeaturesSprite->pushToSprite(_compositedScreenSprite.get(),0,0);
       
-      pixel p = convertGeoToPixel(latitude, longitude, featureAreaToShow);
+      pixel p = convertGeoToPixelDouble(latitude, longitude, featureAreaToShow);
       _diverSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
 
       _compositedScreenSprite->pushSprite(0,0);

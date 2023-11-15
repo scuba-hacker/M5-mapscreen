@@ -72,9 +72,11 @@ void loop()
      pos.lo -= 0.0001;
   else if (M5.BtnB.isPressed())
      pos.la += 0.0001;
-     
-
-
+  else if (M5.Axp.GetBtnPress() == 0x02)
+  {
+    mapScreen->cycleZoom();
+    delay(500);
+  }
 
   bool useTrack = false;
   
