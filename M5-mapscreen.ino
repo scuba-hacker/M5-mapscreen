@@ -32,6 +32,8 @@ int trackLength=sizeof(diveTrack)/sizeof(geo_location);
 
 geo_location pos;
 
+int iter=0;
+
 void setup()
 {
   M5.begin();
@@ -46,6 +48,8 @@ void setup()
 
   pos.la = 51.4605855;    // lightning boat
   pos.lo = -0.54890166666666; 
+
+  mapScreen->setTargetWaypointByLabel("06aN"); // cave
 }
 
 void cycleTrackIndex()
@@ -58,6 +62,11 @@ void cycleTrackIndex()
 
 void loop()
 {
+  if (iter == 40)
+  {
+      mapScreen->setTargetWaypointByLabel("08B"); // The hole
+  }
+  
   M5.update();
 
   if (M5.BtnA.isPressed() && M5.BtnB.isPressed())
@@ -93,6 +102,7 @@ void loop()
   }
     
   cycleTrackIndex();
+  iter++;
   delay(100);
 }
 

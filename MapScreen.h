@@ -47,7 +47,7 @@ static const geo_map s_maps[] =
 /*  ************* Features to add ***********
  *  1. for non-survey maps, last feature and next feature are shown in different colours.
  *  2. diver sprite flashes blue/green.
- *  3. diver sprite is rotated according to compass direction.
+ *  3. DONE - diver sprite is rotated according to compass direction.
  *  4. direction line to target
  *  
 */
@@ -79,7 +79,9 @@ class MapScreen
                                                   _lastDiverLatitude(0),
                                                   _lastDiverLongitude(0),
                                                   _lastDiverHeading(0),
-                                                  _useDiverHeading(false)
+                                                  _useDiverHeading(false),
+                                                  _targetWaypoint(nullptr),
+                                                  _prevWaypoint(nullptr)
     {
       _tft = tft;
       _m5 = m5;
@@ -93,7 +95,25 @@ class MapScreen
       _diverRotatedSprite.reset(new TFT_eSprite(_tft));
       _featureSprite.reset(new TFT_eSprite(_tft));
 
+      _targetSprite.reset(new TFT_eSprite(_tft));
+      _lastTargetSprite.reset(new TFT_eSprite(_tft));
+
       initSprites();
+    }
+
+    void setTargetWaypointByLabel(const char* label)
+    {
+      _prevWaypoint = _targetWaypoint;
+      _targetWaypoint = nullptr;
+      // find targetWayPoint in the navigation_waypoints array by first 5 chars
+      for (int i=0; i < waypointCount; i++)
+      {
+        if (strncmp(waypoints[i]._label, label, 3) == 0)
+        {
+          _targetWaypoint=waypoints+i;
+          break;
+        }
+      }
     }
 
     ~MapScreen()
@@ -131,6 +151,8 @@ class MapScreen
     std::unique_ptr<TFT_eSprite> _diverPlainSprite;
     std::unique_ptr<TFT_eSprite> _diverRotatedSprite;
     std::unique_ptr<TFT_eSprite> _featureSprite;
+    std::unique_ptr<TFT_eSprite> _targetSprite;
+    std::unique_ptr<TFT_eSprite> _lastTargetSprite;
 
     static const int16_t s_imgHeight = 240;
     static const int16_t s_imgWidth = 135;
@@ -158,6 +180,9 @@ class MapScreen
     const geo_map* _canoeZoneMap=s_maps+5;   const uint8_t _canoeZoneMapIndex = 5;
     const geo_map* _subZoneMap=s_maps+6;     const uint8_t _subZoneMapIndex = 6;
 
+    navigationWaypoint* _targetWaypoint;
+    navigationWaypoint* _prevWaypoint;
+   
     int16_t _zoom;
     int16_t _priorToZoneZoom;
     int16_t _tileXToDisplay;
@@ -240,6 +265,14 @@ void MapScreen::initSprites()
   _featureSprite->setColorDepth(16);
   _featureSprite->createSprite(s_featureSpriteRadius*2+1,s_featureSpriteRadius*2+1);
   _featureSprite->fillCircle(s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteColour);
+
+  _targetSprite->setColorDepth(16);
+  _targetSprite->createSprite(s_featureSpriteRadius*2+1,s_featureSpriteRadius*2+1);
+  _targetSprite->fillCircle(s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteRadius,TFT_RED);
+
+  _lastTargetSprite->setColorDepth(16);
+  _lastTargetSprite->createSprite(s_featureSpriteRadius*2+1,s_featureSpriteRadius*2+1);
+  _lastTargetSprite->fillCircle(s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteRadius,TFT_BLUE);
 }
 
 void MapScreen::initCurrentMap(const double diverLatitude, const double diverLongitude)
@@ -551,6 +584,23 @@ MapScreen::pixel MapScreen::scalePixelForZoomedInTile(const pixel p, int16_t& ti
 
 void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const double heading, const geo_map* featureMap)
 {
+
+    if (_targetWaypoint)
+    {
+      pixel p = convertGeoToPixelDouble(_targetWaypoint->_lat, _targetWaypoint->_long, featureMap);
+      int16_t tileX=0,tileY=0;
+      p = scalePixelForZoomedInTile(p,tileX,tileY);
+      _targetSprite->pushToSprite(_compositedScreenSprite.get(), p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK);
+     }
+
+    if (_prevWaypoint)
+    {
+      pixel p = convertGeoToPixelDouble(_prevWaypoint->_lat, _prevWaypoint->_long, featureMap);
+      int16_t tileX=0,tileY=0;
+      p = scalePixelForZoomedInTile(p,tileX,tileY);
+      _lastTargetSprite->pushToSprite(_compositedScreenSprite.get(), p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK);
+    }
+
     pixel p = convertGeoToPixelDouble(latitude, longitude, featureMap);
 
     int16_t tileX=0,tileY=0;
