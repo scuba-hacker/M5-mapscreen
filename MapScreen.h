@@ -44,6 +44,14 @@ static const geo_map s_maps[] =
 };
 
 
+/*  ************* Features to add ***********
+ *  1. for non-survey maps, last feature and next feature are shown in different colours.
+ *  2. diver sprite flashes blue/green.
+ *  3. diver sprite is rotated according to compass direction.
+ *  4. direction line to target
+ *  
+*/
+
 class MapScreen
 {     
   public:
@@ -69,7 +77,8 @@ class MapScreen
                                                   _tileYToDisplay(0),
                                                   _showAllLake(false),
                                                   _lastDiverLatitude(0),
-                                                  _lastDiverLongitude(0)
+                                                  _lastDiverLongitude(0),
+                                                  _lastDiverHeading(0)
     {
       _tft = tft;
       _m5 = m5;
@@ -92,47 +101,14 @@ class MapScreen
     void initCurrentMap(const double diverLatitude, const double diverLongitude);
     void clearMap();
     void drawFeaturesOnSpecifiedMapToScreen(const geo_map* featureAreaToShow, int16_t zoom=1, int16_t tileX=0, int16_t tileY=0);
-    void drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitude, const double diverLongitude);
-    void drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const geo_map* featureMap);
+
+    void drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitude, const double diverLongitude, const double diverHeading = 0);
+    
+    void drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const double heading, const geo_map* featureMap);
 
     void drawRegistrationPixelsOnCleanMapSprite(const geo_map* featureMap);
 
-    void cycleZoom()
-    {            
-      if (_showAllLake)
-      {
-        _showAllLake = false;
-        _zoom = 1;
-        _previousMap=_allLakeMap; 
-        _currentMap=nullptr;
-        Serial.println("switch to zoom 1 normal map\n");
-      }
-      else if (!_showAllLake && _zoom == 4)
-      {
-        _showAllLake = true;
-        _zoom = 1;
-        _currentMap = _allLakeMap;
-        Serial.println("switch to zoom 4 normal map\n");
-      }
-      else if (!_showAllLake && _zoom == 3)
-      {
-        _showAllLake = false;
-        _zoom = 4;
-        Serial.println("switch to zoom 3 normal map\n");
-      }
-      else if (!_showAllLake && _zoom == 2)
-      {
-        _showAllLake = false;
-        _zoom = 3;
-        Serial.println("switch to zoom 2 normal map\n");
-      }
-      else if (!_showAllLake && _zoom == 1)
-      {
-        _showAllLake = false;
-        _zoom = 2;
-        Serial.println("switch to zoom 2 normal map\n");
-      }
-    }
+    void cycleZoom();
     
     void testAnimatingDiverSpriteOnCurrentMap();
     void testDrawingMapsAndFeatures(uint8_t& currentMap, int16_t& zoom);
@@ -156,7 +132,8 @@ class MapScreen
 
     double _lastDiverLatitude;
     double _lastDiverLongitude;
-
+    double _lastDiverHeading;
+    
     const geo_map *_currentMap, *_previousMap;
 
     bool _showAllLake;
@@ -305,8 +282,47 @@ void MapScreen::initCurrentMap(const double diverLatitude, const double diverLon
 void MapScreen::clearMap()
 {
   _currentMap = _previousMap = nullptr;
+  _priorToZoneZoom = _zoom = 1;
+  _tileXToDisplay = _tileXToDisplay = 0;
   _m5->Lcd.fillScreen(TFT_BLACK);
 }
+
+void MapScreen::cycleZoom()
+{            
+  if (_showAllLake)
+  {
+    _showAllLake = false;
+    _zoom = 1;
+    _previousMap=_allLakeMap; 
+    _currentMap=nullptr;
+    Serial.println("switch to zoom 1 normal map\n");
+  }
+  else if (!_showAllLake && _zoom == 4)
+  {
+    _showAllLake = true;
+    _zoom = 1;
+    _currentMap = _allLakeMap;
+    Serial.println("switch to zoom 4 normal map\n");
+  }
+  else if (!_showAllLake && _zoom == 3)
+  {
+    _showAllLake = false;
+    _zoom = 4;
+    Serial.println("switch to zoom 3 normal map\n");
+  }
+  else if (!_showAllLake && _zoom == 2)
+  {
+    _showAllLake = false;
+    _zoom = 3;
+    Serial.println("switch to zoom 2 normal map\n");
+  }
+  else if (!_showAllLake && _zoom == 1)
+  {
+    _showAllLake = false;
+    _zoom = 2;
+    Serial.println("switch to zoom 2 normal map\n");
+  }
+  }
 
 /* Requirements:
  *  
@@ -320,10 +336,11 @@ void MapScreen::clearMap()
  *  diver sprite flashes blue/green.
  */
 
-void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitude, const double diverLongitude)
+void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitude, const double diverLongitude, const double diverHeading)
 {
     _lastDiverLatitude = diverLatitude;
     _lastDiverLongitude = diverLongitude;
+    _lastDiverHeading = diverHeading;
     
     if (_currentMap == nullptr)
     {
@@ -359,7 +376,7 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
     
     _cleanMapAndFeaturesSprite->pushToSprite(_compositedScreenSprite.get(),0,0);
     
-    drawDiverOnCompositedMapSprite(diverLatitude, diverLongitude, nextMap);
+    drawDiverOnCompositedMapSprite(diverLatitude, diverLongitude, diverHeading, nextMap);
 
     _compositedScreenSprite->pushSprite(0,0);
 
@@ -505,14 +522,14 @@ MapScreen::pixel MapScreen::scalePixelForZoomedInTile(const pixel p, int16_t& ti
   return pScaled;
 }
 
-
-
-void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const geo_map* featureMap)
+void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const double heading, const geo_map* featureMap)
 {
     pixel p = convertGeoToPixelDouble(latitude, longitude, featureMap);
 
     int16_t tileX=0,tileY=0;
     p = scalePixelForZoomedInTile(p,tileX,tileY);
+
+    // perform diver sprite rotation here - need a temp sprite to copy into.
     
     _diverSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
 }
