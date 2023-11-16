@@ -11,7 +11,6 @@
 uint8_t currentMap = 0;
 uint8_t zoom = 0;
 uint16_t heading = 0;
-const uint16_t headingStep = 25;
 
 std::unique_ptr<MapScreen> mapScreen;
 
@@ -49,7 +48,7 @@ void setup()
   pos.la = 51.4605855;    // lightning boat
   pos.lo = -0.54890166666666; 
 
-  mapScreen->setTargetWaypointByLabel("06aN"); // cave
+  mapScreen->setTargetWaypointByLabel("Sub"); // Cafe Jetty
 }
 
 void cycleTrackIndex()
@@ -62,20 +61,15 @@ void cycleTrackIndex()
 
 void loop()
 {
-  if (iter == 40)
-  {
-      mapScreen->setTargetWaypointByLabel("08B"); // The hole
-  }
+//  if (iter == 300)
+//  {
+//      mapScreen->setTargetWaypointByLabel("Sub"); // Mid Jetty
+//  }
   
   M5.update();
 
   if (M5.BtnA.isPressed() && M5.BtnB.isPressed())
   {
-    /*
-    pos.la = 51.4605855;    // lightning boat
-    pos.lo = -0.54890166666666; 
-    mapScreen->clearMap();
-    */
      pos.lo -= 0.0002;
      pos.la += 0.0002;
     
@@ -97,13 +91,15 @@ void loop()
   else
   {
     mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(pos.la,pos.lo,heading);
+    const uint16_t headingStep = 5;
+
     heading+=headingStep;
     heading%=360;
   }
     
   cycleTrackIndex();
   iter++;
-  delay(100);
+  delay(20);
 }
 
 

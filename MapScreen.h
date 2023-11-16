@@ -32,6 +32,17 @@ class geo_map
     {}
 };
 
+// array of geomap pointers
+
+class geoRef
+{
+  public:
+    int geoMaps[4];
+    
+};
+
+geoRef s_featureToMaps[waypointCount];
+
 static const geo_map s_maps[] =
 {
   [0] = { .mapData = w1_1_16, .label="North", .backColour=TFT_BLACK, .backText="", .surveyMap=false, .swapBytes=false, .mapLongitudeLeft = -0.55, .mapLongitudeRight = -0.548, .mapLatitudeBottom = 51.4604},
@@ -43,12 +54,12 @@ static const geo_map s_maps[] =
   [6] = { .mapData = nullptr, .label="Sub",  .backColour=TFT_CYAN, .backText="Sub",.surveyMap=true, .swapBytes=false, .mapLongitudeLeft = -0.54931, .mapLongitudeRight = -0.54900, .mapLatitudeBottom = 51.4608}, // Sub area
 };
 
-
 /*  ************* Features to add ***********
- *  1. for non-survey maps, last feature and next feature are shown in different colours.
+ *  1. DONE for non-survey maps, last feature and next feature are shown in different colours.
  *  2. diver sprite flashes blue/green.
  *  3. DONE - diver sprite is rotated according to compass direction.
  *  4. direction line to target
+ *  5. direction line of current heading
  *  
 */
 
@@ -99,13 +110,15 @@ class MapScreen
       _lastTargetSprite.reset(new TFT_eSprite(_tft));
 
       initSprites();
+
+      initFeatureToMapsLookup();
     }
 
     void setTargetWaypointByLabel(const char* label)
     {
       _prevWaypoint = _targetWaypoint;
       _targetWaypoint = nullptr;
-      // find targetWayPoint in the navigation_waypoints array by first 5 chars
+      // find targetWayPoint in the navigation_waypoints array by first 3 chars
       for (int i=0; i < waypointCount; i++)
       {
         if (strncmp(waypoints[i]._label, label, 3) == 0)
@@ -133,6 +146,14 @@ class MapScreen
     void drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitude, const double diverLongitude, const double diverHeading = 0);
     
     void drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const double heading, const geo_map* featureMap);
+
+    double degreesCourseTo(double lat1, double long1, double lat2, double long2) const;
+    double radiansCourseTo(double lat1, double long1, double lat2, double long2) const;
+
+
+    int drawTargetDirectionLineOnCompositeMapSprite(const double diverLatitude, const double diverLongitude, const geo_map* featureMap);
+    void drawHeadingLineOnCompositeMapSprite(const double diverLatitude, const double diverLongitude, 
+                                            const double heading, const geo_map* featureMap);
 
     void drawRegistrationPixelsOnCleanMapSprite(const geo_map* featureMap);
 
@@ -189,6 +210,9 @@ class MapScreen
     int16_t _tileYToDisplay;
     
     void initSprites();
+    void initFeatureToMapsLookup();
+    void initMapsForFeature(navigationWaypoint* waypoint, geoRef& ref);
+
     void drawFeaturesOnCleanMapSprite(const geo_map* featureMap);
 //    void drawFeaturesOnCleanMapSprite(const geo_map* featureMap,uint8_t zoom, uint8_t tileX, uint8_t tileY);
     pixel convertGeoToPixelDouble(double latitude, double longitude, const geo_map* mapToPlot) const;
@@ -234,6 +258,29 @@ const MapScreen::pixel registrationPixels[registrationPixelsSize] =
   [14] = { .x = hX+o, .y = mY-o, .colour = 0x0000},
   [15] = { .x = mX-o, .y = mY-o, .colour = 0x0000},
 };
+
+const MapScreen::pixel mapOffsets[16]=
+{
+  [0]  = { .x=0, .y=0 },   // map 0 to 0
+  [1]  = { .x=30, .y=116 },   // map 0 to 1
+  [2]  = { .x=144, .y=171 },   // map 0 to 2
+  [3]  = { .x=186, .y=219 },   // map 0 to 3
+     
+  [4]  = { .x=-30,.y=-116 }, // map 1 to 0
+  [5]  = { .x=0, .y=0},   // map 1 to 1
+  [6]  = { .x=114, .y=55 },   // map 1 to 2
+  [7]  = { .x=156, .y=103 },   // map 1 to 3
+
+  [8]  = { .x=-144, .y=-171},   // map 2 to 0
+  [9]  = { .x=-114, .y=-55 },   // map 2 to 1
+  [10] = { .x=0, .y=0 },   // map 2 to 2
+  [11] = { .x=42, .y=48 },   // map 2 to 3
+
+  [12] = { .x=-186, .y=-219 },   // map 3 to 0
+  [13] = { .x=-156, .y=-103 },   // map 3 to 1
+  [14] = { .x=-42, .y=-48 },   // map 3 to 2
+  [15] = { .x=0, .y=0 },   // map 3 to 3
+};
     
 void MapScreen::initSprites()
 {
@@ -273,6 +320,35 @@ void MapScreen::initSprites()
   _lastTargetSprite->setColorDepth(16);
   _lastTargetSprite->createSprite(s_featureSpriteRadius*2+1,s_featureSpriteRadius*2+1);
   _lastTargetSprite->fillCircle(s_featureSpriteRadius,s_featureSpriteRadius,s_featureSpriteRadius,TFT_BLUE);
+}
+
+void MapScreen::initFeatureToMapsLookup()
+{
+  for (int i=0; i<waypointCount; i++)
+  {
+    initMapsForFeature(waypoints+i,s_featureToMaps[i]);
+  }
+}
+
+void MapScreen::initMapsForFeature(navigationWaypoint* waypoint, geoRef& ref)
+{
+  int refIndex = 0;
+  
+  pixel p;
+  
+  for (uint8_t i=_northMapIndex; i<_allLakeMapIndex; i++)
+  {
+    p = convertGeoToPixelDouble(waypoint->_lat, waypoint->_long, s_maps+i);
+    if (p.x >= 0 && p.x < s_imgWidth && p.y >=0 && p.y < s_imgHeight)
+    {
+      ref.geoMaps[refIndex++] = i;
+//      Serial.printf("Feature %i Map %i\n",waypoint-waypoints,i);
+    }
+    else
+    {
+      ref.geoMaps[refIndex++] = -1;
+    }
+  }
 }
 
 void MapScreen::initCurrentMap(const double diverLatitude, const double diverLongitude)
@@ -386,14 +462,16 @@ void MapScreen::cycleZoom()
 
 /* Requirements:
  *  
- *  _currentMap starts at NULL.
- *  survey maps are checked for presence before non-survey maps.
- *  survey maps show all features within map extent, plus diver, without last visited feature shown.
- *  survey maps only switch to last zoom non-survey map when out of area.
- *  at zoom level 1 and 2, base map gets switched once the selectMap function has detected diver moved to edge as defined by current map.
- *  at zoom level 2 switch between tiles within a base map is done at a tile boundary.
- *  for non-survey maps, last feature and next feature are shown in different colours.
- *  diver sprite flashes blue/green.
+ *  DONE - survey maps are checked for presence before non-survey maps.
+ *  DONE - survey maps show all features within map extent, plus diver, without last visited feature shown.
+ *  DONE - survey maps only switch to last zoom non-survey map when out of area.
+ *  DONE - at zoom level 1 and 2, base map gets switched once the selectMap function has detected diver moved to edge as defined by current map.
+ *  DONE 0 at zoom level 2 switch between tiles within a base map is done at a tile boundary.
+ *  DONE - for non-survey maps, last feature and next feature are shown in different colours.
+ *  DONE - Heading indicator in blue
+ *  DONE - Direction Line in red to next feature spanning maps and tiles at any zoom
+ *  TODO - Green Line pointing to nearest exit Cafe or Mid Jetty
+ *  TODO - Diver sprite flashes blue/green.
  */
 
 void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitude, const double diverLongitude, const double diverHeading)
@@ -436,6 +514,10 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
     
     _cleanMapAndFeaturesSprite->pushToSprite(_compositedScreenSprite.get(),0,0);
     
+    double bearingToTarget = drawTargetDirectionLineOnCompositeMapSprite(diverLatitude, diverLongitude, nextMap);
+    
+    drawHeadingLineOnCompositeMapSprite(diverLatitude, diverLongitude, diverHeading, nextMap); // was diverHeading
+        
     drawDiverOnCompositedMapSprite(diverLatitude, diverLongitude, diverHeading, nextMap);
 
     _compositedScreenSprite->pushSprite(0,0);
@@ -582,15 +664,228 @@ MapScreen::pixel MapScreen::scalePixelForZoomedInTile(const pixel p, int16_t& ti
   return pScaled;
 }
 
+double MapScreen::degreesCourseTo(double lat1, double long1, double lat2, double long2) const
+{
+  return radiansCourseTo( lat1,  long1,  lat2,  long2) / PI * 180;
+}
+
+double MapScreen::radiansCourseTo(double lat1, double long1, double lat2, double long2) const
+{
+  // returns course in degrees (North=0, West=270) from position 1 to position 2,
+  // both specified as signed decimal-degrees latitude and longitude.
+  // Because Earth is no exact sphere, calculated course may be off by a tiny fraction.
+  // Courtesy of Maarten Lamers
+  double dlon = radians(long2-long1);
+  lat1 = radians(lat1);
+  lat2 = radians(lat2);
+  double a1 = sin(dlon) * cos(lat2);
+  double a2 = sin(lat1) * cos(lat2) * cos(dlon);
+  a2 = cos(lat1) * sin(lat2) - a2;
+  a2 = atan2(a1, a2);
+  if (a2 < 0.0)
+  {
+    a2 += TWO_PI;
+  }
+  return a2;
+}
+
+
+int MapScreen::drawTargetDirectionLineOnCompositeMapSprite(const double diverLatitude, const double diverLongitude, 
+                                                            const geo_map* featureMap)
+{
+  // 1. WORKS CORRECTLY IF TARGET ON SAME MAP and TILE AS DIVER, at zoom 1 or zoom 2.
+  // 2. If at zoom 1 and on different map, direction line angle is not right as it does not account for x and y offsets across maps.
+  // 3. At zoom 2 the issues arising from (2) have twice an impact in incorrect locations.
+  int heading = 0;
+  
+  if (_targetWaypoint)
+  {
+    pixel pDiver = convertGeoToPixelDouble(diverLatitude, diverLongitude, featureMap);
+    int16_t diverTileX=0,diverTileY=0;
+    pDiver = scalePixelForZoomedInTile(pDiver,diverTileX,diverTileY);
+
+    int16_t targetTileX=0,targetTileY=0;
+    pixel pTarget = convertGeoToPixelDouble(_targetWaypoint->_lat, _targetWaypoint->_long, featureMap);
+
+    
+    /*
+    int waypointIndex = _targetWaypoint-waypoints;
+    // 1. get the maps for target way point
+    geoRef* mapsForTarget = s_featureToMaps+waypointIndex;
+
+    // 2. choose the single map of interest to calculate target direction line
+
+    int diverMapIndex = featureMap - s_maps;
+// START OPTION 1 //////////////////////
+    int targetMapIndex = -1;
+    
+    // check for current diver map
+    if (mapsForTarget->geoMaps[diverMapIndex] != -1)
+      targetMapIndex = diverMapIndex;
+    else
+    {
+      int t = diverMapIndex;
+      
+      if (t == 0)
+      {
+        // search for first map with feature to the right   
+        if (mapsForTarget->geoMaps[t+1] != -1)
+          targetMapIndex=t+1;
+        else if (mapsForTarget->geoMaps[t+2] != -1)
+          targetMapIndex=t+2;
+        else if (mapsForTarget->geoMaps[t+3] != -1)
+          targetMapIndex=t+3;
+      }
+      else if (t == 1)
+      {
+        if (mapsForTarget->geoMaps[t-1] != -1)
+          targetMapIndex=t-1;
+        else if (mapsForTarget->geoMaps[t+1] != -1)
+          targetMapIndex=t+1;
+        else if (mapsForTarget->geoMaps[t+2] != -1)
+          targetMapIndex=t+2;
+      }
+      else if (t == 2)
+      {
+        if (mapsForTarget->geoMaps[t-1] != -1)
+          targetMapIndex=t-1;
+        else if (mapsForTarget->geoMaps[t+1] != -1)
+          targetMapIndex=t+1;
+        else if (mapsForTarget->geoMaps[t-2] != -1)
+          targetMapIndex=t-2;
+      }
+      else if (t == 3)
+      {
+        if (mapsForTarget->geoMaps[t-1] != -1)
+          targetMapIndex=t-1;
+        else if (mapsForTarget->geoMaps[t-2] != -1)
+          targetMapIndex=t-2;
+        else if (mapsForTarget->geoMaps[t-3] != -1)
+          targetMapIndex=t-3;
+      }
+    }
+
+    if (targetMapIndex == -1)
+      return 0.0;
+    // 4. get the x/y translation between the two maps
+    pixel translation = mapOffsets[diverMapIndex*4 + targetMapIndex];
+
+    // 5. translate target pixel location 
+    pTarget.x += translation.x;
+    pTarget.y += translation.y;
+    
+//    pTarget= scalePixelForZoomedInTile(pTarget,targetTileX,targetTileY);  // that gives pixel for the appropriate tile, but we need it relative to the entire image.
+
+    pTarget.x = pTarget.x * _zoom - s_imgWidth * diverTileX;     // t.x = 10; tileX=0; tileX = 1;
+    pTarget.y = pTarget.y * _zoom - s_imgHeight * diverTileY;   /// there was a bug here
+
+//    geo_map* targetMap = nullptr;//s_mapForFeatures[_targetWaypoint-waypoints];   // look up the map that the // features reside on multiple maps
+
+//    pTarget.x = pTarget.x + mapOffsets[featureMap-s_maps][targetMap-s_maps];
+//    pTarget.y = pTarget.y + mapOffsets[featureMap-s_maps][targetMap-s_maps];
+      
+    _compositedScreenSprite->drawLine(pDiver.x, pDiver.y, pTarget.x,pTarget.y,TFT_RED);    
+      
+    _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y-2, pTarget.x,pTarget.y,TFT_RED);
+    _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y+2, pTarget.x,pTarget.y,TFT_RED);
+    _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y-2, pTarget.x,pTarget.y,TFT_RED);
+    _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y+2, pTarget.x,pTarget.y,TFT_RED);
+
+
+    if (pTarget.y < pDiver.y)
+      return (int)(atan((double)(pTarget.x - pDiver.x) / (double)(-(pTarget.y - pDiver.y))) * 180.0 / PI) % 360;
+    else if (pTarget.y > pDiver.y)
+      return (int)(180.0 + atan((double)(pTarget.x - pDiver.x) / (double)(-(pTarget.y - pDiver.y))) * 180.0 / PI);
+    else
+      return 0;
+  }
+  
+  return 0;
+}
+// END OPTION 1 //////////////////////
+*/
+
+// START OPTION 2 //////////////////////
+
+    if (!isPixelOutsideScreenExtent(convertGeoToPixelDouble(_targetWaypoint->_lat, _targetWaypoint->_long, featureMap)))
+    {
+      // use line between diver and target locations
+      pTarget.x = pTarget.x * _zoom - s_imgWidth * diverTileX;
+      pTarget.y = pTarget.y * _zoom - s_imgHeight * diverTileY;
+
+      _compositedScreenSprite->drawLine(pDiver.x, pDiver.y, pTarget.x,pTarget.y,TFT_RED);
+  
+      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y-2, pTarget.x,pTarget.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y+2, pTarget.x,pTarget.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y-2, pTarget.x,pTarget.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y+2, pTarget.x,pTarget.y,TFT_RED);
+
+      if (pTarget.y < pDiver.y)
+        heading = (int)(atan((double)(pTarget.x - pDiver.x) / (double)(-(pTarget.y - pDiver.y))) * 180.0 / PI) % 360;
+      else if (pTarget.y > pDiver.y)
+        heading = (int)(180.0 + atan((double)(pTarget.x - pDiver.x) / (double)(-(pTarget.y - pDiver.y))) * 180.0 / PI);
+    }
+    else
+    {
+      heading = degreesCourseTo(diverLatitude,diverLongitude,_targetWaypoint->_lat,_targetWaypoint->_long);
+  
+      // use lat/long to draw outside map area with arbitrary length.
+      pixel pHeading;
+    
+      const double hypotoneuse=100;
+      double rads = heading * PI / 180.0;  
+      pHeading.x = pDiver.x + hypotoneuse * sin(rads);
+      pHeading.y = pDiver.y - hypotoneuse * cos(rads);
+
+      _compositedScreenSprite->drawLine(pDiver.x, pDiver.y, pHeading.x,pHeading.y,TFT_RED);
+    
+      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y-2, pHeading.x,pHeading.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y+2, pHeading.x,pHeading.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y-2, pHeading.x,pHeading.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y+2, pHeading.x,pHeading.y,TFT_RED);
+    }
+  }
+  return heading;
+// END OPTION 2 //////////////////////
+}
+
+void MapScreen::drawHeadingLineOnCompositeMapSprite(const double diverLatitude, const double diverLongitude, 
+                                                            const double heading, const geo_map* featureMap)
+{
+  int16_t tileX=0,tileY=0;
+  pixel pDiver = convertGeoToPixelDouble(diverLatitude, diverLongitude, featureMap);
+  pDiver = scalePixelForZoomedInTile(pDiver,tileX,tileY);
+  
+  const double hypotoneuse=50;
+  pixel pHeading;
+
+  double rads = heading * PI / 180.0;  
+  pHeading.x = pDiver.x + hypotoneuse * sin(rads);
+  pHeading.y = pDiver.y - hypotoneuse * cos(rads);
+
+  _compositedScreenSprite->drawLine(pDiver.x, pDiver.y, pHeading.x,pHeading.y,TFT_BLUE);
+
+  _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y-2, pHeading.x,pHeading.y,TFT_BLUE);
+  _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y+2, pHeading.x,pHeading.y,TFT_BLUE);
+  _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y-2, pHeading.x,pHeading.y,TFT_BLUE);
+  _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y+2, pHeading.x,pHeading.y,TFT_BLUE);
+}
+
 void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const double heading, const geo_map* featureMap)
 {
+    pixel pDiver = convertGeoToPixelDouble(latitude, longitude, featureMap);
+
+    int16_t diverTileX=0, diverTileY=0;
+    pDiver = scalePixelForZoomedInTile(pDiver, diverTileX, diverTileY);
 
     if (_targetWaypoint)
     {
       pixel p = convertGeoToPixelDouble(_targetWaypoint->_lat, _targetWaypoint->_long, featureMap);
       int16_t tileX=0,tileY=0;
       p = scalePixelForZoomedInTile(p,tileX,tileY);
-      _targetSprite->pushToSprite(_compositedScreenSprite.get(), p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK);
+  
+      if (tileX == diverTileX && tileY == diverTileY)  // only show target sprite on screen if tiles match
+        _targetSprite->pushToSprite(_compositedScreenSprite.get(), p.x-s_featureSpriteRadius,p.y-s_featureSpriteRadius,TFT_BLACK);
      }
 
     if (_prevWaypoint)
@@ -598,22 +893,19 @@ void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const doub
       pixel p = convertGeoToPixelDouble(_prevWaypoint->_lat, _prevWaypoint->_long, featureMap);
       int16_t tileX=0,tileY=0;
       p = scalePixelForZoomedInTile(p,tileX,tileY);
-      _lastTargetSprite->pushToSprite(_compositedScreenSprite.get(), p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK);
+      if (tileX == diverTileX && tileY == diverTileY)  // only show last target sprite on screen if tiles match
+        _lastTargetSprite->pushToSprite(_compositedScreenSprite.get(), p.x-s_featureSpriteRadius,p.y-s_featureSpriteRadius,TFT_BLACK);
     }
 
-    pixel p = convertGeoToPixelDouble(latitude, longitude, featureMap);
-
-    int16_t tileX=0,tileY=0;
-    p = scalePixelForZoomedInTile(p,tileX,tileY);
-
+    // draw direction line to next target.
     if (_useDiverHeading)
     {
       _diverSprite->pushRotated(_diverRotatedSprite.get(),heading,TFT_BLACK); // BLACK is the transparent colour
-      _diverRotatedSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
+      _diverRotatedSprite->pushToSprite(_compositedScreenSprite.get(),pDiver.x-s_diverSpriteRadius,pDiver.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
     }
     else
     {
-      _diverPlainSprite->pushToSprite(_compositedScreenSprite.get(),p.x-s_diverSpriteRadius,p.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
+      _diverPlainSprite->pushToSprite(_compositedScreenSprite.get(),pDiver.x-s_diverSpriteRadius,pDiver.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
     }
 }
 /*
