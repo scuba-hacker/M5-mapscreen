@@ -54,6 +54,9 @@ static const geo_map s_maps[] =
   [6] = { .mapData = nullptr, .label="Sub",  .backColour=TFT_CYAN, .backText="Sub",.surveyMap=true, .swapBytes=false, .mapLongitudeLeft = -0.54931, .mapLongitudeRight = -0.54900, .mapLatitudeBottom = 51.4608}, // Sub area
 };
 
+const uint8_t exitWaypointCount = 4;
+navigationWaypoint* exitWaypoints[exitWaypointCount];
+
 /*  ************* Features to add ***********
  *  1. DONE for non-survey maps, last feature and next feature are shown in different colours.
  *  2. diver sprite flashes blue/green.
@@ -92,6 +95,7 @@ class MapScreen
                                                   _lastDiverHeading(0),
                                                   _useDiverHeading(false),
                                                   _targetWaypoint(nullptr),
+                                                  _closestExitWaypoint(nullptr),
                                                   _prevWaypoint(nullptr)
     {
       _tft = tft;
@@ -110,8 +114,8 @@ class MapScreen
       _lastTargetSprite.reset(new TFT_eSprite(_tft));
 
       initSprites();
-
       initFeatureToMapsLookup();
+      initExitWaypoints();
     }
 
     void setTargetWaypointByLabel(const char* label)
@@ -147,11 +151,16 @@ class MapScreen
     
     void drawDiverOnCompositedMapSprite(const double latitude, const double longitude, const double heading, const geo_map* featureMap);
 
+    double distanceBetween(double lat1, double long1, double lat2, double long2) const;
     double degreesCourseTo(double lat1, double long1, double lat2, double long2) const;
     double radiansCourseTo(double lat1, double long1, double lat2, double long2) const;
 
 
-    int drawTargetDirectionLineOnCompositeMapSprite(const double diverLatitude, const double diverLongitude, const geo_map* featureMap);
+    navigationWaypoint* getClosestJetty(double& distance);
+
+    int drawDirectionLineOnCompositeSprite(const double diverLatitude, const double diverLongitude, 
+                                                    const geo_map* featureMap, navigationWaypoint* waypoint, uint16_t colour, int indicatorLength);
+
     void drawHeadingLineOnCompositeMapSprite(const double diverLatitude, const double diverLongitude, 
                                             const double heading, const geo_map* featureMap);
 
@@ -203,6 +212,7 @@ class MapScreen
 
     navigationWaypoint* _targetWaypoint;
     navigationWaypoint* _prevWaypoint;
+    navigationWaypoint* _closestExitWaypoint;
    
     int16_t _zoom;
     int16_t _priorToZoneZoom;
@@ -211,6 +221,7 @@ class MapScreen
     
     void initSprites();
     void initFeatureToMapsLookup();
+    void initExitWaypoints();
     void initMapsForFeature(navigationWaypoint* waypoint, geoRef& ref);
 
     void drawFeaturesOnCleanMapSprite(const geo_map* featureMap);
@@ -342,7 +353,6 @@ void MapScreen::initMapsForFeature(navigationWaypoint* waypoint, geoRef& ref)
     if (p.x >= 0 && p.x < s_imgWidth && p.y >=0 && p.y < s_imgHeight)
     {
       ref.geoMaps[refIndex++] = i;
-//      Serial.printf("Feature %i Map %i\n",waypoint-waypoints,i);
     }
     else
     {
@@ -351,10 +361,27 @@ void MapScreen::initMapsForFeature(navigationWaypoint* waypoint, geoRef& ref)
   }
 }
 
-void MapScreen::initCurrentMap(const double diverLatitude, const double diverLongitude)
+
+void MapScreen::initExitWaypoints()
 {
-  Serial.println("enter initCurrentMap");  
+  int currentExitIndex=0;
   
+  for (int i=0; i<waypointCount; i++)
+  {
+    if (strncmp(waypoints[i]._label, "Z0", 2) == 0)
+    {
+      exitWaypoints[currentExitIndex++] = waypoints+i;
+      if (currentExitIndex == exitWaypointCount - 1)
+      {
+        exitWaypoints[currentExitIndex] = nullptr;
+        break;
+      }
+    }
+  }
+}
+
+void MapScreen::initCurrentMap(const double diverLatitude, const double diverLongitude)
+{  
   _currentMap = _previousMap = _allLakeMap;
 
   pixel p;
@@ -366,13 +393,8 @@ void MapScreen::initCurrentMap(const double diverLatitude, const double diverLon
     if (p.x >= 0 && p.x < s_imgWidth && p.y >=0 && p.y < s_imgHeight)
     {
       scalePixelForZoomedInTile(p,_tileXToDisplay, _tileYToDisplay);
-      Serial.printf("hit map: %i x=%hu y=%hu tx=%i ty=%i\n",i,p.x,p.y,_tileXToDisplay,_tileYToDisplay);
       _currentMap = s_maps+i;
       break;
-    }
-    else
-    {
-      Serial.printf("miss map: %i x=%hu y=%hu\n",i,p.x,p.y);
     }
   }
   
@@ -474,6 +496,28 @@ void MapScreen::cycleZoom()
  *  TODO - Diver sprite flashes blue/green.
  */
 
+navigationWaypoint* MapScreen::getClosestJetty(double& shortestDistance)
+{
+  shortestDistance = 1e10;
+  navigationWaypoint* closest = nullptr;
+
+  navigationWaypoint** next = exitWaypoints;
+  
+  while (*next)
+  {
+    double distance = distanceBetween(_lastDiverLatitude, _lastDiverLongitude, (*next)->_lat, (*next)->_long);
+  
+    if (distance < shortestDistance)
+    {
+      shortestDistance =  distance;
+      _closestExitWaypoint = *next;
+    }
+    next++;
+  }
+    
+  return _closestExitWaypoint;
+}
+
 void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitude, const double diverLongitude, const double diverHeading)
 {
     _lastDiverLatitude = diverLatitude;
@@ -513,8 +557,12 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
     }
     
     _cleanMapAndFeaturesSprite->pushToSprite(_compositedScreenSprite.get(),0,0);
-    
-    double bearingToTarget = drawTargetDirectionLineOnCompositeMapSprite(diverLatitude, diverLongitude, nextMap);
+
+    double distanceToClosestJetty = 0.0;
+    double bearing = 0.0;
+    bearing = drawDirectionLineOnCompositeSprite(diverLatitude, diverLongitude, nextMap,getClosestJetty(distanceToClosestJetty), TFT_DARKGREEN, 70);
+
+    bearing = drawDirectionLineOnCompositeSprite(diverLatitude, diverLongitude, nextMap,_targetWaypoint, TFT_RED, 100);
     
     drawHeadingLineOnCompositeMapSprite(diverLatitude, diverLongitude, diverHeading, nextMap); // was diverHeading
         
@@ -664,6 +712,31 @@ MapScreen::pixel MapScreen::scalePixelForZoomedInTile(const pixel p, int16_t& ti
   return pScaled;
 }
 
+double MapScreen::distanceBetween(double lat1, double long1, double lat2, double long2) const
+{
+  // returns distance in meters between two positions, both specified
+  // as signed decimal-degrees latitude and longitude. Uses great-circle
+  // distance computation for hypothetical sphere of radius 6372795 meters.
+  // Because Earth is no exact sphere, rounding errors may be up to 0.5%.
+  // Courtesy of Maarten Lamers
+  double delta = radians(long1-long2);
+  double sdlong = sin(delta);
+  double cdlong = cos(delta);
+  lat1 = radians(lat1);
+  lat2 = radians(lat2);
+  double slat1 = sin(lat1);
+  double clat1 = cos(lat1);
+  double slat2 = sin(lat2);
+  double clat2 = cos(lat2);
+  delta = (clat1 * slat2) - (slat1 * clat2 * cdlong);
+  delta = sq(delta);
+  delta += sq(clat2 * sdlong);
+  delta = sqrt(delta);
+  double denom = (slat1 * slat2) + (clat1 * clat2 * cdlong);
+  delta = atan2(delta, denom);
+  return delta * 6372795.0;
+}
+
 double MapScreen::degreesCourseTo(double lat1, double long1, double lat2, double long2) const
 {
   return radiansCourseTo( lat1,  long1,  lat2,  long2) / PI * 180;
@@ -690,22 +763,22 @@ double MapScreen::radiansCourseTo(double lat1, double long1, double lat2, double
 }
 
 
-int MapScreen::drawTargetDirectionLineOnCompositeMapSprite(const double diverLatitude, const double diverLongitude, 
-                                                            const geo_map* featureMap)
+int MapScreen::drawDirectionLineOnCompositeSprite(const double diverLatitude, const double diverLongitude, 
+                                                            const geo_map* featureMap, navigationWaypoint* waypoint, uint16_t colour, int indicatorLength)
 {
   // 1. WORKS CORRECTLY IF TARGET ON SAME MAP and TILE AS DIVER, at zoom 1 or zoom 2.
   // 2. If at zoom 1 and on different map, direction line angle is not right as it does not account for x and y offsets across maps.
   // 3. At zoom 2 the issues arising from (2) have twice an impact in incorrect locations.
   int heading = 0;
   
-  if (_targetWaypoint)
+  if (waypoint)
   {
     pixel pDiver = convertGeoToPixelDouble(diverLatitude, diverLongitude, featureMap);
     int16_t diverTileX=0,diverTileY=0;
     pDiver = scalePixelForZoomedInTile(pDiver,diverTileX,diverTileY);
 
     int16_t targetTileX=0,targetTileY=0;
-    pixel pTarget = convertGeoToPixelDouble(_targetWaypoint->_lat, _targetWaypoint->_long, featureMap);
+    pixel pTarget = convertGeoToPixelDouble(waypoint->_lat, waypoint->_long, featureMap);
 
     
     /*
@@ -807,18 +880,18 @@ int MapScreen::drawTargetDirectionLineOnCompositeMapSprite(const double diverLat
 
 // START OPTION 2 //////////////////////
 
-    if (!isPixelOutsideScreenExtent(convertGeoToPixelDouble(_targetWaypoint->_lat, _targetWaypoint->_long, featureMap)))
+    if (!isPixelOutsideScreenExtent(convertGeoToPixelDouble(waypoint->_lat, waypoint->_long, featureMap)))
     {
       // use line between diver and target locations
       pTarget.x = pTarget.x * _zoom - s_imgWidth * diverTileX;
       pTarget.y = pTarget.y * _zoom - s_imgHeight * diverTileY;
 
-      _compositedScreenSprite->drawLine(pDiver.x, pDiver.y, pTarget.x,pTarget.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x, pDiver.y, pTarget.x,pTarget.y,colour);
   
-      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y-2, pTarget.x,pTarget.y,TFT_RED);
-      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y+2, pTarget.x,pTarget.y,TFT_RED);
-      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y-2, pTarget.x,pTarget.y,TFT_RED);
-      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y+2, pTarget.x,pTarget.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y-2, pTarget.x,pTarget.y,colour);
+      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y+2, pTarget.x,pTarget.y,colour);
+      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y-2, pTarget.x,pTarget.y,colour);
+      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y+2, pTarget.x,pTarget.y,colour);
 
       if (pTarget.y < pDiver.y)
         heading = (int)(atan((double)(pTarget.x - pDiver.x) / (double)(-(pTarget.y - pDiver.y))) * 180.0 / PI) % 360;
@@ -827,22 +900,21 @@ int MapScreen::drawTargetDirectionLineOnCompositeMapSprite(const double diverLat
     }
     else
     {
-      heading = degreesCourseTo(diverLatitude,diverLongitude,_targetWaypoint->_lat,_targetWaypoint->_long);
+      heading = degreesCourseTo(diverLatitude,diverLongitude,waypoint->_lat,waypoint->_long);
   
       // use lat/long to draw outside map area with arbitrary length.
       pixel pHeading;
     
-      const double hypotoneuse=100;
       double rads = heading * PI / 180.0;  
-      pHeading.x = pDiver.x + hypotoneuse * sin(rads);
-      pHeading.y = pDiver.y - hypotoneuse * cos(rads);
+      pHeading.x = pDiver.x + indicatorLength * sin(rads);
+      pHeading.y = pDiver.y - indicatorLength * cos(rads);
 
-      _compositedScreenSprite->drawLine(pDiver.x, pDiver.y, pHeading.x,pHeading.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x, pDiver.y, pHeading.x,pHeading.y,colour);
     
-      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y-2, pHeading.x,pHeading.y,TFT_RED);
-      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y+2, pHeading.x,pHeading.y,TFT_RED);
-      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y-2, pHeading.x,pHeading.y,TFT_RED);
-      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y+2, pHeading.x,pHeading.y,TFT_RED);
+      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y-2, pHeading.x,pHeading.y,colour);
+      _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y+2, pHeading.x,pHeading.y,colour);
+      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y-2, pHeading.x,pHeading.y,colour);
+      _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y+2, pHeading.x,pHeading.y,colour);
     }
   }
   return heading;
