@@ -1,3 +1,6 @@
+#ifndef mapscreen_h
+#define mapscreen_h
+
 #include <M5StickCPlus.h>
 #include <math.h>
 #include <memory.h>
@@ -1275,3 +1278,5 @@ void MapScreen::testDrawingMapsAndFeatures(uint8_t& currentMap, int16_t& zoom)
     }
   } 
 }
+
+#endif

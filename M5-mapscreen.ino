@@ -1,37 +1,27 @@
 #include <M5StickCPlus.h>
-#include <math.h>
-#include <map>
-#include <set>
-#include <memory>
+#include <memory.h>
 
 #include "navigation_waypoints.h"
+#include "dive_track.h"
 
 #include "MapScreen.h"
 
-uint8_t currentMap = 0;
-uint8_t zoom = 0;
-uint16_t heading = 0;
-
 std::unique_ptr<MapScreen> mapScreen;
+
+int iter=0;
 
 class geo_location
 {
   public:
     double la;
     double lo;
+    int heading;
 };
-
-const geo_location diveTrack[] =
-{  
-  [0] = { .la = 0, .lo =0},
-};
-
-int trackIndex=0;
-int trackLength=sizeof(diveTrack)/sizeof(geo_location);
 
 geo_location pos;
 
-int iter=0;
+int trackIndex=0;
+int trackLength=sizeof(diveTrack)/sizeof(location);
 
 void setup()
 {
@@ -72,7 +62,6 @@ void loop()
   {
      pos.lo -= 0.0002;
      pos.la += 0.0002;
-    
   }
   else if (M5.BtnA.isPressed())
      pos.lo -= 0.0001;
@@ -81,45 +70,25 @@ void loop()
   else if (M5.Axp.GetBtnPress() == 0x02)
   {
     mapScreen->cycleZoom();
-    delay(500);
+    while(M5.Axp.GetBtnPress() == 0x02);
   }
 
-  bool useTrack = false;
+  bool useTrack = true;
   
   if (useTrack)
-    mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(diveTrack[trackIndex].la,diveTrack[trackIndex].lo);
+  {
+    mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(diveTrack[trackIndex]._la,diveTrack[trackIndex]._lo,diveTrack[trackIndex]._h);
+  }
   else
   {
-    mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(pos.la,pos.lo,heading);
+    mapScreen->drawDiverOnBestFeaturesMapAtCurrentZoom(pos.la,pos.lo,pos.heading);
     const uint16_t headingStep = 5;
 
-    heading+=headingStep;
-    heading%=360;
+    pos.heading+=headingStep;
+    pos.heading%=360;
   }
     
   cycleTrackIndex();
   iter++;
-  delay(50);
+//  delay(50);
 }
-
-
-void loop_away()
-{
-//  M5.update();
-//  mapScreen->testDrawingMapsAndFeatures(currentMap,zoom);
-
-    mapScreen->drawFeaturesOnSpecifiedMapToScreen(s_maps+currentMap);
-    
-    mapScreen->testAnimatingDiverSpriteOnCurrentMap();
-    
-    currentMap++;
-    if (currentMap == 7)
-      currentMap=0;
-    delay(1000);
-}
-
-/*
-
-// need an out of map option - the top middle triangle for example
-
-*/
