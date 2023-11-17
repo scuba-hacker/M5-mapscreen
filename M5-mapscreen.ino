@@ -99,7 +99,7 @@ void loop()
     
   cycleTrackIndex();
   iter++;
-//  delay(20);
+  delay(50);
 }
 
 
