@@ -298,6 +298,16 @@ const MapScreen::pixel mapOffsets[16]=
     
 void MapScreen::initSprites()
 {
+/*
+  // test large screen 8 bit allocation for double buffer
+  _cleanMapAndFeaturesSprite->setColorDepth(8);
+  _cleanMapAndFeaturesSprite->createSprite(320,240);
+
+  _compositedScreenSprite->setColorDepth(8);
+  _compositedScreenSprite->createSprite(320,240);
+
+  return;
+  */
   _cleanMapAndFeaturesSprite->setColorDepth(16);
   _cleanMapAndFeaturesSprite->createSprite(135,240);
 
@@ -527,9 +537,11 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
     _lastDiverLongitude = diverLongitude;
     _lastDiverHeading = diverHeading;
     
+    bool forceFirstMapDraw = false;
     if (_currentMap == nullptr)
     {
       initCurrentMap(diverLatitude, diverLongitude);
+      forceFirstMapDraw=true;
     }
     
     pixel p = convertGeoToPixelDouble(diverLatitude, diverLongitude, _currentMap);
@@ -541,22 +553,27 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
       _previousMap = _currentMap;
     }
 
+    int16_t prevTileX = _tileXToDisplay;
+    int16_t prevTileY = _tileYToDisplay;
+    
     p = scalePixelForZoomedInTile(p,_tileXToDisplay,_tileYToDisplay);
 
     // draw diver and feature map at pixel
-    if (nextMap->mapData)
+    if (nextMap != _currentMap || prevTileX != _tileXToDisplay || prevTileY != _tileYToDisplay || forceFirstMapDraw )
     {
-      
-      _cleanMapAndFeaturesSprite->pushImageScaled(0, 0, s_imgWidth, s_imgHeight, _zoom, _tileXToDisplay, _tileYToDisplay, 
-                                                  nextMap->mapData, nextMap->swapBytes);
-      drawFeaturesOnCleanMapSprite(nextMap);
-//      drawRegistrationPixelsOnCleanMapSprite(nextMap);
-    }
-    else
-    {
-      _cleanMapAndFeaturesSprite->fillSprite(nextMap->backColour);
-      
-      drawFeaturesOnCleanMapSprite(nextMap);  // need to revert zoom to 1
+      if (nextMap->mapData)
+      {
+        _cleanMapAndFeaturesSprite->pushImageScaled(0, 0, s_imgWidth, s_imgHeight, _zoom, _tileXToDisplay, _tileYToDisplay, 
+                                                    nextMap->mapData, nextMap->swapBytes);
+        drawFeaturesOnCleanMapSprite(nextMap);
+  //      drawRegistrationPixelsOnCleanMapSprite(nextMap);
+      }
+      else
+      {
+        _cleanMapAndFeaturesSprite->fillSprite(nextMap->backColour);
+        
+        drawFeaturesOnCleanMapSprite(nextMap);  // need to revert zoom to 1
+      }
     }
     
     _cleanMapAndFeaturesSprite->pushToSprite(_compositedScreenSprite.get(),0,0);
@@ -975,6 +992,7 @@ void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const doub
     // draw direction line to next target.
     if (_useDiverHeading)
     {
+      _diverRotatedSprite->fillSprite(TFT_BLACK);
       _diverSprite->pushRotated(_diverRotatedSprite.get(),heading,TFT_BLACK); // BLACK is the transparent colour
       _diverRotatedSprite->pushToSprite(_compositedScreenSprite.get(),pDiver.x-s_diverSpriteRadius,pDiver.y-s_diverSpriteRadius,TFT_BLACK); // BLACK is the transparent colour
     }

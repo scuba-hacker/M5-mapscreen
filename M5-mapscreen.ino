@@ -1,5 +1,6 @@
 #include <M5StickCPlus.h>
 #include <memory.h>
+#include "esp_heap_caps.h"
 
 #include "navigation_waypoints.h"
 #include "dive_track.h"
@@ -30,6 +31,16 @@ void setup()
   M5.Lcd.setRotation(0);
   
   mapScreen.reset(new MapScreen(&M5.Lcd,&M5));
+
+  multi_heap_info_t info;
+  heap_caps_get_info(&info, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // internal RAM, memory capable to store data or to create new task
+  info.total_free_bytes;   // total currently free in all non-continues blocks
+  info.minimum_free_bytes;  // minimum free ever
+  info.largest_free_block;   // largest continues block to allocate big array
+
+  // Serial.println("Managed to allocate 2 x 8-bit 320x240 = 76800 bytes");
+  // Serial.printf("free bytes: %i  largest free block: %i\n",  info.total_free_bytes, info.largest_free_block);
+  
   mapScreen->setUseDiverHeading(true);
 
   pos.la = 51.4601028571429;    // spitfire car
