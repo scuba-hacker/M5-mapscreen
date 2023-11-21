@@ -2,7 +2,7 @@
 #include <memory.h>
 #include "esp_heap_caps.h"
 
-#include "navigation_waypoints.h"
+//#include "navigation_waypoints.h"
 #include "dive_track.h"
 
 #include "MapScreen.h"
@@ -20,12 +20,15 @@ class geo_location
 geo_location pos;
 
 int trackIndex=0;
-int trackLength=sizeof(diveTrack)/sizeof(location);
+int trackLength=0;
 
 int testIteration=0;
 
 void setup()
 {
+  trackIndex=0;
+  trackLength=getSizeOfDiveTrack();
+  
   M5.begin();
   
   M5.Lcd.setRotation(0);
