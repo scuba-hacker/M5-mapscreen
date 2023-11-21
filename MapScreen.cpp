@@ -95,7 +95,8 @@ MapScreen::MapScreen(TFT_eSPI* tft, M5StickCPlus* m5) : _allLakeMap(s_maps+4),
                                                         _useDiverHeading(false),
                                                         _targetWaypoint(nullptr),
                                                         _closestExitWaypoint(nullptr),
-                                                        _prevWaypoint(nullptr)
+                                                        _prevWaypoint(nullptr),
+                                                        _drawAllFeatures(true)
 {
   _tft = tft;
   _m5 = m5;
@@ -283,6 +284,43 @@ void MapScreen::setTargetWaypointByLabel(const char* label)
   }
 }
 
+void MapScreen::setZoom(const int16_t zoom)
+{
+    _previousMap = _currentMap;
+
+   if (_showAllLake)
+   {
+    _showAllLake = false;
+    _currentMap = nullptr;
+   }
+
+  _zoom = zoom;
+  Serial.printf("switch to zoom %hu normal map\n",zoom);
+}
+    
+void MapScreen::setAllLakeShown(bool showAll)
+{ 
+  if (_showAllLake && showAll || 
+      !_showAllLake && !showAll)
+    return;
+
+  if (showAll)
+  {
+    _showAllLake = true;
+    _zoom = 1;
+    _currentMap = _allLakeMap;
+    Serial.println("setAllLakeShown(true): switch to zoom 1 all lake map\n");
+  }
+  else
+  {
+    _showAllLake = false;
+    _zoom = 1;
+    _previousMap=_allLakeMap; 
+    _currentMap=nullptr;      // force recalculate of currentmap
+    Serial.println("setAllLakeShown(false): switch to zoom 1 normal map\n");
+  }
+}
+
 void MapScreen::cycleZoom()
 {            
   if (_showAllLake)
@@ -376,7 +414,8 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
       {
         _cleanMapAndFeaturesSprite->pushImageScaled(0, 0, s_imgWidth, s_imgHeight, _zoom, _tileXToDisplay, _tileYToDisplay, 
                                                     nextMap->mapData, nextMap->swapBytes);
-        drawFeaturesOnCleanMapSprite(nextMap);
+        if (_drawAllFeatures)
+          drawFeaturesOnCleanMapSprite(nextMap);
   //      drawRegistrationPixelsOnCleanMapSprite(nextMap);    // Test Pattern
       }
       else
@@ -676,6 +715,15 @@ void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const doub
     int16_t diverTileX=0, diverTileY=0;
     pDiver = scalePixelForZoomedInTile(pDiver, diverTileX, diverTileY);
 
+    if (_prevWaypoint)
+    {
+      pixel p = convertGeoToPixelDouble(_prevWaypoint->_lat, _prevWaypoint->_long, featureMap);
+      int16_t tileX=0,tileY=0;
+      p = scalePixelForZoomedInTile(p,tileX,tileY);
+      if (tileX == diverTileX && tileY == diverTileY)  // only show last target sprite on screen if tiles match
+        _lastTargetSprite->pushToSprite(_compositedScreenSprite.get(), p.x-s_featureSpriteRadius,p.y-s_featureSpriteRadius,TFT_BLACK);
+    }
+
     if (_targetWaypoint)
     {
       pixel p = convertGeoToPixelDouble(_targetWaypoint->_lat, _targetWaypoint->_long, featureMap);
@@ -685,15 +733,6 @@ void MapScreen::drawDiverOnCompositedMapSprite(const double latitude, const doub
       if (tileX == diverTileX && tileY == diverTileY)  // only show target sprite on screen if tiles match
         _targetSprite->pushToSprite(_compositedScreenSprite.get(), p.x-s_featureSpriteRadius,p.y-s_featureSpriteRadius,TFT_BLACK);
      }
-
-    if (_prevWaypoint)
-    {
-      pixel p = convertGeoToPixelDouble(_prevWaypoint->_lat, _prevWaypoint->_long, featureMap);
-      int16_t tileX=0,tileY=0;
-      p = scalePixelForZoomedInTile(p,tileX,tileY);
-      if (tileX == diverTileX && tileY == diverTileY)  // only show last target sprite on screen if tiles match
-        _lastTargetSprite->pushToSprite(_compositedScreenSprite.get(), p.x-s_featureSpriteRadius,p.y-s_featureSpriteRadius,TFT_BLACK);
-    }
 
     // draw direction line to next target.
     if (_useDiverHeading)

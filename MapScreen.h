@@ -108,7 +108,17 @@ class MapScreen
     void drawRegistrationPixelsOnCleanMapSprite(const geo_map* featureMap);
 
     void cycleZoom();
+
     
+    bool isAllLakeShown() const { return _showAllLake; }
+    void setAllLakeShown(bool showAll);
+
+    int16_t getZoom() const     { return _zoom; }
+    void setZoom(const int16_t zoom);
+
+    void setDrawAllFeatures(const bool showAll)
+    { _drawAllFeatures = showAll; }
+
     void testAnimatingDiverSpriteOnCurrentMap();
     void testDrawingMapsAndFeatures(uint8_t& currentMap, int16_t& zoom);
 
@@ -161,6 +171,8 @@ class MapScreen
     int16_t _priorToZoneZoom;
     int16_t _tileXToDisplay;
     int16_t _tileYToDisplay;
+
+    bool _drawAllFeatures;
     
     void initSprites();
     void initFeatureToMapsLookup();

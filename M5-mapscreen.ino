@@ -2,7 +2,6 @@
 #include <memory.h>
 #include "esp_heap_caps.h"
 
-//#include "navigation_waypoints.h"
 #include "dive_track.h"
 
 #include "MapScreen.h"
@@ -34,6 +33,7 @@ void setup()
   M5.Lcd.setRotation(0);
   
   mapScreen.reset(new MapScreen(&M5.Lcd,&M5));
+  mapScreen->setDrawAllFeatures(false);
 
   multi_heap_info_t info;
   heap_caps_get_info(&info, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // internal RAM, memory capable to store data or to create new task
@@ -51,8 +51,6 @@ void setup()
 
   pos.la = 51.4605855;    // lightning boat
   pos.lo = -0.54890166666666; 
-
-  mapScreen->setTargetWaypointByLabel("Sub"); // Cafe Jetty
 }
 
 void cycleTrackIndex()
@@ -65,10 +63,47 @@ void cycleTrackIndex()
 
 void loop()
 {
-//  if (testIteration == 300)
-//  {
-//      mapScreen->setTargetWaypointByLabel("Sub"); // Mid Jetty
-//  }
+  if (trackIndex == 0)
+  {
+    mapScreen->setAllLakeShown(false);
+    mapScreen->setTargetWaypointByLabel("Sub"); // Cafe Jetty
+  }
+  else if (trackIndex == 400)
+  {
+    mapScreen->setTargetWaypointByLabel("Canoe"); // Mid Jetty    
+  }
+  else if (trackIndex == 500)
+  {
+    mapScreen->setAllLakeShown(true);
+  }
+  else if (trackIndex == 600)
+  {
+     mapScreen->setZoom(1);
+  }
+  else if (trackIndex == 700)
+  {
+     mapScreen->setZoom(2);
+  }
+  else if (trackIndex == 800)
+  {
+     mapScreen->setZoom(3);
+  }
+  else if (trackIndex == 900)
+  {
+     mapScreen->setZoom(4);
+  }
+  else if (trackIndex == 1000)
+  {
+     mapScreen->setZoom(3);
+  }
+  else if (trackIndex == 1100)
+  {
+     mapScreen->setZoom(2);
+  }
+  else if (trackIndex == 1100)
+  {
+     mapScreen->setZoom(1);
+  }
   
   M5.update();
 
