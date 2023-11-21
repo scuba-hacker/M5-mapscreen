@@ -49,6 +49,7 @@ class geoRef
  *  DONE - Heading indicator in blue
  *  DONE - Direction Line in red to next feature spanning maps and tiles at any zoom
  *  DONE - Green Line pointing to nearest exit Cafe or Mid Jetty
+ *  TODO - flash Diver Sprite Pink/Yellow when recording a new PIN location.
  *  TODO - Diver sprite flashes blue/green.
  *  TODO - breadcrumb trail
  */
@@ -117,7 +118,18 @@ class MapScreen
     void setZoom(const int16_t zoom);
 
     void setDrawAllFeatures(const bool showAll)
-    { _drawAllFeatures = showAll; }
+    { 
+      _drawAllFeatures = showAll; 
+      _currentMap = nullptr;     // invalidate current map
+    }
+
+    void toggleDrawAllFeatures()
+    {
+      setDrawAllFeatures(!getDrawAllFeatures());
+    }
+
+    bool getDrawAllFeatures() const
+    { return _drawAllFeatures; }
 
     void testAnimatingDiverSpriteOnCurrentMap();
     void testDrawingMapsAndFeatures(uint8_t& currentMap, int16_t& zoom);

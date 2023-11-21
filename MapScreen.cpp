@@ -242,23 +242,23 @@ void MapScreen::initCurrentMap(const double diverLatitude, const double diverLon
   else if (_currentMap == _allLakeMap)
   {
     _previousMap = _allLakeMap;
-    Serial.println("ALL Lake");
+//    Serial.println("ALL Lake");
   }
   else if (_currentMap == _canoeZoneMap)
   {
     _previousMap = _canoeZoneMap;
-    Serial.println("Canoe Zone");
+//    Serial.println("Canoe Zone");
   }
   else if (_currentMap == _subZoneMap)
   {
     _previousMap = _subZoneMap;
-    Serial.println("Sub Zone");
+//    Serial.println("Sub Zone");
   }
   else
   {
-    Serial.println("Unknown map");
+ //   Serial.println("Unknown map");
   }
-  Serial.println("exit initCurrentMap");  
+//  Serial.println("exit initCurrentMap");  
 }
 
 void MapScreen::clearMap()
@@ -295,7 +295,7 @@ void MapScreen::setZoom(const int16_t zoom)
    }
 
   _zoom = zoom;
-  Serial.printf("switch to zoom %hu normal map\n",zoom);
+//  Serial.printf("switch to zoom %hu normal map\n",zoom);
 }
     
 void MapScreen::setAllLakeShown(bool showAll)
@@ -309,7 +309,7 @@ void MapScreen::setAllLakeShown(bool showAll)
     _showAllLake = true;
     _zoom = 1;
     _currentMap = _allLakeMap;
-    Serial.println("setAllLakeShown(true): switch to zoom 1 all lake map\n");
+//    Serial.println("setAllLakeShown(true): switch to zoom 1 all lake map\n");
   }
   else
   {
@@ -329,32 +329,32 @@ void MapScreen::cycleZoom()
     _zoom = 1;
     _previousMap=_allLakeMap; 
     _currentMap=nullptr;
-    Serial.println("switch to zoom 1 normal map\n");
+//    Serial.println("switch to zoom 1 normal map\n");
   }
   else if (!_showAllLake && _zoom == 4)
   {
     _showAllLake = true;
     _zoom = 1;
     _currentMap = _allLakeMap;
-    Serial.println("switch to zoom 4 normal map\n");
+ //   Serial.println("switch to zoom 4 normal map\n");
   }
   else if (!_showAllLake && _zoom == 3)
   {
     _showAllLake = false;
     _zoom = 4;
-    Serial.println("switch to zoom 3 normal map\n");
+//    Serial.println("switch to zoom 3 normal map\n");
   }
   else if (!_showAllLake && _zoom == 2)
   {
     _showAllLake = false;
     _zoom = 3;
-    Serial.println("switch to zoom 2 normal map\n");
+//    Serial.println("switch to zoom 2 normal map\n");
   }
   else if (!_showAllLake && _zoom == 1)
   {
     _showAllLake = false;
     _zoom = 2;
-    Serial.println("switch to zoom 2 normal map\n");
+//    Serial.println("switch to zoom 2 normal map\n");
   }
 }
 
@@ -408,7 +408,7 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
     p = scalePixelForZoomedInTile(p,_tileXToDisplay,_tileYToDisplay);
 
     // draw diver and feature map at pixel
-    if (nextMap != _currentMap || prevTileX != _tileXToDisplay || prevTileY != _tileYToDisplay || forceFirstMapDraw )
+    if (nextMap != _currentMap || prevTileX != _tileXToDisplay || prevTileY != _tileYToDisplay || forceFirstMapDraw)
     {
       if (nextMap->mapData)
       {

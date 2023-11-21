@@ -68,6 +68,10 @@ void loop()
     mapScreen->setAllLakeShown(false);
     mapScreen->setTargetWaypointByLabel("Sub"); // Cafe Jetty
   }
+  else if (trackIndex == 200)
+  {
+    mapScreen->setDrawAllFeatures(true);
+  }
   else if (trackIndex == 400)
   {
     mapScreen->setTargetWaypointByLabel("Canoe"); // Mid Jetty    
@@ -103,8 +107,9 @@ void loop()
   else if (trackIndex == 1100)
   {
      mapScreen->setZoom(1);
+     mapScreen->setDrawAllFeatures(false);
   }
-  
+
   M5.update();
 
   if (M5.BtnA.isPressed() && M5.BtnB.isPressed())
@@ -113,7 +118,11 @@ void loop()
      pos.la += 0.0002;
   }
   else if (M5.BtnA.isPressed())
+  {
+     mapScreen->toggleDrawAllFeatures();  
+     delay(100);
      pos.lo -= 0.0001;
+  }
   else if (M5.BtnB.isPressed())
      pos.la += 0.0001;
   else if (M5.Axp.GetBtnPress() == 0x02)
