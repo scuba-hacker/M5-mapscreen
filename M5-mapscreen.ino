@@ -9,8 +9,6 @@
 
 std::unique_ptr<MapScreen> mapScreen;
 
-int iter=0;
-
 class geo_location
 {
   public:
@@ -23,6 +21,8 @@ geo_location pos;
 
 int trackIndex=0;
 int trackLength=sizeof(diveTrack)/sizeof(location);
+
+int testIteration=0;
 
 void setup()
 {
@@ -62,7 +62,7 @@ void cycleTrackIndex()
 
 void loop()
 {
-//  if (iter == 300)
+//  if (testIteration == 300)
 //  {
 //      mapScreen->setTargetWaypointByLabel("Sub"); // Mid Jetty
 //  }
@@ -100,6 +100,6 @@ void loop()
   }
     
   cycleTrackIndex();
-  iter++;
+  testIteration++;
 //  delay(50);
 }

@@ -35,16 +35,13 @@ class geo_map
     {}
 };
 
-// array of geomap pointers
-
 class geoRef
 {
   public:
     int geoMaps[4];
-    
 };
 
-geoRef s_featureToMaps[waypointCount];
+static geoRef s_featureToMaps[waypointCount];
 
 static const geo_map s_maps[] =
 {
@@ -60,15 +57,21 @@ static const geo_map s_maps[] =
 const uint8_t exitWaypointCount = 4;
 navigationWaypoint* exitWaypoints[exitWaypointCount];
 
-/*  ************* Features to add ***********
- *  1. DONE for non-survey maps, last feature and next feature are shown in different colours.
- *  2. diver sprite flashes blue/green.
- *  3. DONE - diver sprite is rotated according to compass direction.
- *  4. direction line to target
- *  5. direction line of current heading
+/* Requirements:
  *  
-*/
-
+ *  DONE - survey maps are checked for presence before non-survey maps.
+ *  DONE - survey maps show all features within map extent, plus diver, without last visited feature shown.
+ *  DONE - survey maps only switch to last zoom non-survey map when out of area.
+ *  DONE - diver sprite is rotated according to compass direction.
+ *  DONE - at zoom level 1 and 2, base map gets switched once the selectMap function has detected diver moved to edge as defined by current map.
+ *  DONE - at zoom level 2 switch between tiles within a base map is done at a tile boundary.
+ *  DONE - for non-survey maps, last feature and next feature are shown in different colours.
+ *  DONE - Heading indicator in blue
+ *  DONE - Direction Line in red to next feature spanning maps and tiles at any zoom
+ *  DONE - Green Line pointing to nearest exit Cafe or Mid Jetty
+ *  TODO - Diver sprite flashes blue/green.
+ */
+ 
 class MapScreen
 {     
   public:
@@ -245,12 +248,12 @@ class MapScreen
 };
 
 
-const int16_t mX = 135,  hX = 67;
-const int16_t mY = 240,  hY = 120;
-const int16_t o = 10;
+static const int16_t mX = 135,  hX = 67;
+static const int16_t mY = 240,  hY = 120;
+static const int16_t o = 10;
 
-const int registrationPixelsSize=16;
-const MapScreen::pixel registrationPixels[registrationPixelsSize] =
+static const int registrationPixelsSize=16;
+static const MapScreen::pixel registrationPixels[registrationPixelsSize] =
 {
   [0] = { .x = o,    .y = o,    .colour = 0xFF00},
   [1] = { .x = hX-o, .y = o,    .colour = 0xFF00},
@@ -273,7 +276,7 @@ const MapScreen::pixel registrationPixels[registrationPixelsSize] =
   [15] = { .x = mX-o, .y = mY-o, .colour = 0x0000},
 };
 
-const MapScreen::pixel mapOffsets[16]=
+static const MapScreen::pixel mapOffsets[16]=
 {
   [0]  = { .x=0, .y=0 },   // map 0 to 0
   [1]  = { .x=30, .y=116 },   // map 0 to 1
@@ -298,16 +301,6 @@ const MapScreen::pixel mapOffsets[16]=
     
 void MapScreen::initSprites()
 {
-/*
-  // test large screen 8 bit allocation for double buffer
-  _cleanMapAndFeaturesSprite->setColorDepth(8);
-  _cleanMapAndFeaturesSprite->createSprite(320,240);
-
-  _compositedScreenSprite->setColorDepth(8);
-  _compositedScreenSprite->createSprite(320,240);
-
-  return;
-  */
   _cleanMapAndFeaturesSprite->setColorDepth(16);
   _cleanMapAndFeaturesSprite->createSprite(135,240);
 
@@ -374,7 +367,6 @@ void MapScreen::initMapsForFeature(navigationWaypoint* waypoint, geoRef& ref)
   }
 }
 
-
 void MapScreen::initExitWaypoints()
 {
   int currentExitIndex=0;
@@ -411,7 +403,6 @@ void MapScreen::initCurrentMap(const double diverLatitude, const double diverLon
     }
   }
   
-
   if (_currentMap == _northMap)
   {
     _previousMap = _cafeJettyMap;
@@ -493,21 +484,7 @@ void MapScreen::cycleZoom()
     _zoom = 2;
     Serial.println("switch to zoom 2 normal map\n");
   }
-  }
-
-/* Requirements:
- *  
- *  DONE - survey maps are checked for presence before non-survey maps.
- *  DONE - survey maps show all features within map extent, plus diver, without last visited feature shown.
- *  DONE - survey maps only switch to last zoom non-survey map when out of area.
- *  DONE - at zoom level 1 and 2, base map gets switched once the selectMap function has detected diver moved to edge as defined by current map.
- *  DONE 0 at zoom level 2 switch between tiles within a base map is done at a tile boundary.
- *  DONE - for non-survey maps, last feature and next feature are shown in different colours.
- *  DONE - Heading indicator in blue
- *  DONE - Direction Line in red to next feature spanning maps and tiles at any zoom
- *  TODO - Green Line pointing to nearest exit Cafe or Mid Jetty
- *  TODO - Diver sprite flashes blue/green.
- */
+}
 
 navigationWaypoint* MapScreen::getClosestJetty(double& shortestDistance)
 {
@@ -566,7 +543,7 @@ void MapScreen::drawDiverOnBestFeaturesMapAtCurrentZoom(const double diverLatitu
         _cleanMapAndFeaturesSprite->pushImageScaled(0, 0, s_imgWidth, s_imgHeight, _zoom, _tileXToDisplay, _tileYToDisplay, 
                                                     nextMap->mapData, nextMap->swapBytes);
         drawFeaturesOnCleanMapSprite(nextMap);
-  //      drawRegistrationPixelsOnCleanMapSprite(nextMap);
+  //      drawRegistrationPixelsOnCleanMapSprite(nextMap);    // Test Pattern
       }
       else
       {
@@ -782,13 +759,9 @@ double MapScreen::radiansCourseTo(double lat1, double long1, double lat2, double
   return a2;
 }
 
-
 int MapScreen::drawDirectionLineOnCompositeSprite(const double diverLatitude, const double diverLongitude, 
-                                                            const geo_map* featureMap, navigationWaypoint* waypoint, uint16_t colour, int indicatorLength)
+                                                  const geo_map* featureMap, navigationWaypoint* waypoint, uint16_t colour, int indicatorLength)
 {
-  // 1. WORKS CORRECTLY IF TARGET ON SAME MAP and TILE AS DIVER, at zoom 1 or zoom 2.
-  // 2. If at zoom 1 and on different map, direction line angle is not right as it does not account for x and y offsets across maps.
-  // 3. At zoom 2 the issues arising from (2) have twice an impact in incorrect locations.
   int heading = 0;
   
   if (waypoint)
@@ -799,106 +772,6 @@ int MapScreen::drawDirectionLineOnCompositeSprite(const double diverLatitude, co
 
     int16_t targetTileX=0,targetTileY=0;
     pixel pTarget = convertGeoToPixelDouble(waypoint->_lat, waypoint->_long, featureMap);
-
-    
-    /*
-    int waypointIndex = _targetWaypoint-waypoints;
-    // 1. get the maps for target way point
-    geoRef* mapsForTarget = s_featureToMaps+waypointIndex;
-
-    // 2. choose the single map of interest to calculate target direction line
-
-    int diverMapIndex = featureMap - s_maps;
-// START OPTION 1 //////////////////////
-    int targetMapIndex = -1;
-    
-    // check for current diver map
-    if (mapsForTarget->geoMaps[diverMapIndex] != -1)
-      targetMapIndex = diverMapIndex;
-    else
-    {
-      int t = diverMapIndex;
-      
-      if (t == 0)
-      {
-        // search for first map with feature to the right   
-        if (mapsForTarget->geoMaps[t+1] != -1)
-          targetMapIndex=t+1;
-        else if (mapsForTarget->geoMaps[t+2] != -1)
-          targetMapIndex=t+2;
-        else if (mapsForTarget->geoMaps[t+3] != -1)
-          targetMapIndex=t+3;
-      }
-      else if (t == 1)
-      {
-        if (mapsForTarget->geoMaps[t-1] != -1)
-          targetMapIndex=t-1;
-        else if (mapsForTarget->geoMaps[t+1] != -1)
-          targetMapIndex=t+1;
-        else if (mapsForTarget->geoMaps[t+2] != -1)
-          targetMapIndex=t+2;
-      }
-      else if (t == 2)
-      {
-        if (mapsForTarget->geoMaps[t-1] != -1)
-          targetMapIndex=t-1;
-        else if (mapsForTarget->geoMaps[t+1] != -1)
-          targetMapIndex=t+1;
-        else if (mapsForTarget->geoMaps[t-2] != -1)
-          targetMapIndex=t-2;
-      }
-      else if (t == 3)
-      {
-        if (mapsForTarget->geoMaps[t-1] != -1)
-          targetMapIndex=t-1;
-        else if (mapsForTarget->geoMaps[t-2] != -1)
-          targetMapIndex=t-2;
-        else if (mapsForTarget->geoMaps[t-3] != -1)
-          targetMapIndex=t-3;
-      }
-    }
-
-    if (targetMapIndex == -1)
-      return 0.0;
-    // 4. get the x/y translation between the two maps
-    pixel translation = mapOffsets[diverMapIndex*4 + targetMapIndex];
-
-    // 5. translate target pixel location 
-    pTarget.x += translation.x;
-    pTarget.y += translation.y;
-    
-//    pTarget= scalePixelForZoomedInTile(pTarget,targetTileX,targetTileY);  // that gives pixel for the appropriate tile, but we need it relative to the entire image.
-
-    pTarget.x = pTarget.x * _zoom - s_imgWidth * diverTileX;     // t.x = 10; tileX=0; tileX = 1;
-    pTarget.y = pTarget.y * _zoom - s_imgHeight * diverTileY;   /// there was a bug here
-
-//    geo_map* targetMap = nullptr;//s_mapForFeatures[_targetWaypoint-waypoints];   // look up the map that the // features reside on multiple maps
-
-//    pTarget.x = pTarget.x + mapOffsets[featureMap-s_maps][targetMap-s_maps];
-//    pTarget.y = pTarget.y + mapOffsets[featureMap-s_maps][targetMap-s_maps];
-      
-    _compositedScreenSprite->drawLine(pDiver.x, pDiver.y, pTarget.x,pTarget.y,TFT_RED);    
-      
-    _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y-2, pTarget.x,pTarget.y,TFT_RED);
-    _compositedScreenSprite->drawLine(pDiver.x-2, pDiver.y+2, pTarget.x,pTarget.y,TFT_RED);
-    _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y-2, pTarget.x,pTarget.y,TFT_RED);
-    _compositedScreenSprite->drawLine(pDiver.x+2, pDiver.y+2, pTarget.x,pTarget.y,TFT_RED);
-
-
-    if (pTarget.y < pDiver.y)
-      return (int)(atan((double)(pTarget.x - pDiver.x) / (double)(-(pTarget.y - pDiver.y))) * 180.0 / PI) % 360;
-    else if (pTarget.y > pDiver.y)
-      return (int)(180.0 + atan((double)(pTarget.x - pDiver.x) / (double)(-(pTarget.y - pDiver.y))) * 180.0 / PI);
-    else
-      return 0;
-  }
-  
-  return 0;
-}
-// END OPTION 1 //////////////////////
-*/
-
-// START OPTION 2 //////////////////////
 
     if (!isPixelOutsideScreenExtent(convertGeoToPixelDouble(waypoint->_lat, waypoint->_long, featureMap)))
     {
@@ -938,7 +811,6 @@ int MapScreen::drawDirectionLineOnCompositeSprite(const double diverLatitude, co
     }
   }
   return heading;
-// END OPTION 2 //////////////////////
 }
 
 void MapScreen::drawHeadingLineOnCompositeMapSprite(const double diverLatitude, const double diverLongitude, 
@@ -1054,8 +926,6 @@ void MapScreen::drawFeaturesOnCleanMapSprite(const geo_map* featureMap)
   }
 }
 
-//#define PI 3.141592653589793
-
 MapScreen::pixel MapScreen::convertGeoToPixelDouble(double latitude, double longitude, const geo_map* mapToPlot) const
 {  
   const int16_t mapWidth = s_imgWidth; // in pixels
@@ -1076,7 +946,6 @@ MapScreen::pixel MapScreen::convertGeoToPixelDouble(double latitude, double long
 
   return pixel(x,y);
 }
-
 
 void MapScreen::debugScaledPixelForTile(pixel p, pixel pScaled, int16_t tileX,int16_t tileY) const
 {
@@ -1107,19 +976,6 @@ void MapScreen::debugPixelFeatureOutput(navigationWaypoint* waypoint, MapScreen:
 ///////////////
 ///////////////
 ///////////////
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 MapScreen::pixel MapScreen::convertGeoToPixelFloat(float latitude, float longitude, const geo_map* mapToPlot) const
 {
